@@ -28,9 +28,10 @@ struct ContentView: View {
         VStack(spacing: 12) {
             FrontPanelView(model: model)
             HStack {
-                Button("BASIC 8K ROM で起動", action: model.bootBasicROM)
-                Button("CP/M 2.2 で起動", action: model.bootCPM)
-                Button("CP/M 3 で起動", action: model.bootCPM3)
+                Button("BASIC 8K", action: model.bootBasicROM).help("Altair BASIC 8K ROM で起動")
+                Button("CP/M 2.2", action: model.bootCPM).help("CP/M 2.2 をドライブ A から起動")
+                Button("CP/M 3", action: model.bootCPM3).help("CP/M 3 をドライブ A・B から起動")
+                Button("Zork", action: model.bootZork).help("Zork ディスクをドライブ A から起動(ZORK1 / ZORK2 と入力)")
                 Menu("ディスク") {
                     ForEach(0..<SimulatorModel.visibleDrives, id: \.self) { d in
                         let name = String(UnicodeScalar(UInt8(65 + d)))

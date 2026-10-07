@@ -262,6 +262,11 @@ final class SimulatorModel: ObservableObject {
         bootFromDisks([("cpm3_v1.0_56K_disk1.dsk", 0), ("cpm3_v1.0_56k_disk2.dsk", 1)], label: "CP/M 3")
     }
 
+    /// Zork(Burcon 56K CP/M 2.2 のブータブルディスク)をドライブ A から起動する。
+    func bootZork() {
+        bootFromDisks([("zork.dsk", 0)], label: "Zork ディスク")
+    }
+
     private func bootFromDisks(_ files: [(name: String, drive: Int)], label: String) {
         do {
             guard let dir = Bundle.module.resourceURL?.appendingPathComponent("roms") else { return }
