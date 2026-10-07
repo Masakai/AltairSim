@@ -49,7 +49,8 @@ final class LEDTestProgramTests: XCTestCase {
         m.reset()
         m.start()
         m.run(cycles: 100)
-        XCTAssertFalse(m.running)
+        XCTAssertTrue(m.cpu.halted)
+        XCTAssertTrue(m.running, "HLT 後も RUN のまま")
         XCTAssertTrue(m.status.contains(.hlta))
     }
 }

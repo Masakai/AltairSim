@@ -163,8 +163,9 @@ public final class AltairMachine: Bus {
             used += c
             cycleCounter += c
             if cpu.halted {
-                running = false
+                // HLT 後は実機と同じく RUN のまま(HLTA が点灯し、WAIT は消灯)。クロックは消費しない。
                 status = [.hlta, .memr, .wo]
+                break
             }
         }
         return used

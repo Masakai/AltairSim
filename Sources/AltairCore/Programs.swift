@@ -104,3 +104,40 @@ extension Array {
         Array([Array](repeating: self, count: n).joined())
     }
 }
+
+/// CP/M 用の .COM を、CP/M 本体なしで動かすための最小の BDOS 互換部(FC00h)。
+/// 0005h の呼び出しのうち、C=2(E の文字を出力)と C=9(DE の文字列を `$` まで出力)だけを
+/// エミュレートした 8080 コードで処理し、2SIO(10h/11h)から端末へ出す。
+/// 0000h(ウォームブート)は HLT にして、プログラムの終了を HLTA ランプで見せる。
+public enum CPMConsoleShim {
+    public static let origin: UInt16 = 0xFC00
+    public static let code: [UInt8] = [
+        0xF5, 0xC5, 0xD5, 0xE5,        // FC00 PUSH PSW / B / D / H
+        0x79,                          // FC04 MOV A,C
+        0xFE, 0x02, 0xCA, 0x12, 0xFC,  // FC05 CPI 2 / JZ FC12(1 文字出力)
+        0xFE, 0x09, 0xCA, 0x19, 0xFC,  // FC0A CPI 9 / JZ FC19(文字列出力)
+        0xC3, 0x32, 0xFC,              // FC0F JMP FC32(終了処理)
+        0x7B, 0xCD, 0x26, 0xFC,        // FC12 MOV A,E / CALL FC26(出力)
+        0xC3, 0x32, 0xFC,              // FC16 JMP FC32
+        0x1A, 0xFE, 0x24, 0xCA, 0x32, 0xFC,  // FC19 LDAX D / CPI '$' / JZ FC32
+        0xCD, 0x26, 0xFC, 0x13, 0xC3, 0x19, 0xFC,  // FC1F CALL FC26 / INX D / JMP FC19
+        0xF5,                          // FC26 PUSH PSW
+        0xDB, 0x10, 0xE6, 0x02, 0xCA, 0x27, 0xFC,  // FC27 IN 10h / ANI 02h / JZ FC27(送信可を待つ)
+        0xF1, 0xD3, 0x11, 0xC9,        // FC2E POP PSW / OUT 11h / RET
+        0xE1, 0xD1, 0xC1, 0xF1, 0xC9,  // FC32 POP H / D / B / PSW / RET
+    ]
+
+    /// RAM を 64KB にしてクリアし、.COM を 0100h に置き、PC を 0100h にする。実行は呼び出し側で start する。
+    public static func load(com: [UInt8], into m: AltairMachine) {
+        m.removeROMs()
+        m.setRAMSize(0x10000)
+        m.clearMemory()
+        m.load(code, at: origin)
+        m.load([0x76], at: 0x0000)                                       // ウォームブート = HLT
+        m.load([0xC3, UInt8(origin & 0xFF), UInt8(origin >> 8)], at: 0x0005)  // JMP BDOS(0006h = BDOS のアドレス)
+        m.load(com, at: 0x0100)
+        m.cpu.reset()
+        m.cpu.pc = 0x0100
+        m.cpu.sp = origin &- 0x10
+    }
+}

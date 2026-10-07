@@ -69,6 +69,8 @@ final class SimulatorModel: ObservableObject {
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.flushDisks() }
         }
+        // 起動直後に電源だけ入って何も動かない状態だと故障に見えるので、CP/M 2.2 を自動で起動する
+        DispatchQueue.main.async { [weak self] in self?.bootCPM() }
         machine.onSerialOutput = { [weak self] byte in
             self?.appendTerminal(byte)
         }
@@ -87,7 +89,7 @@ final class SimulatorModel: ObservableObject {
             case .realTime:
                 cycleDebt += elapsed * Double(AltairMachine.clockHz)
                 let used = machine.run(cycles: Int(cycleDebt))
-                cycleDebt -= Double(used)
+                cycleDebt = machine.cpu.halted ? 0 : cycleDebt - Double(used)
             case .fast:
                 while machine.running && ProcessInfo.processInfo.systemUptime - now < 0.008 {
                     machine.run(cycles: 20_000)
@@ -265,6 +267,24 @@ final class SimulatorModel: ObservableObject {
     /// Zork(Burcon 56K CP/M 2.2 のブータブルディスク)をドライブ A から起動する。
     func bootZork() {
         bootFromDisks([("zork.dsk", 0)], label: "Zork ディスク")
+    }
+
+    /// 8080 命令テスト(.COM)を、BDOS 互換のシムを載せたこのマシン上で実行し、結果を端末に出す。
+    func runCPUTest(_ file: String, title: String, fast: Bool) {
+        do {
+            guard let dir = Bundle.module.resourceURL?.appendingPathComponent("cpu_tests") else { return }
+            let com = [UInt8](try Data(contentsOf: dir.appendingPathComponent(file)))
+            machine.stop()
+            CPMConsoleShim.load(com: com, into: machine)
+            clearTerminal()
+            powered = true
+            cpuSpeed = fast ? .fast : .realTime
+            machine.start()
+            refresh()
+            statusMessage = "\(title) を実行中(終了すると HLT で止まり HLTA が点灯します。CPU: \(fast ? "最速" : "2MHz"))"
+        } catch {
+            statusMessage = "\(title) の読み込みに失敗: \(error)"
+        }
     }
 
     private func bootFromDisks(_ files: [(name: String, drive: Int)], label: String) {

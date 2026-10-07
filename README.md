@@ -59,3 +59,20 @@ CP/M 3 の動作確認: `CP/M V3.0 Loader` から `CP/M 3 BIOS v1.0 for Altair 8
 ## Zork
 
 「Zork」ボタンで Burcon 56K CP/M 2.2 のディスク(`zork.dsk`)をドライブ A から起動します。`A>` で `ZORK1` または `ZORK2` と入力します。同梱のディスクには `ZORK3.COM` はありますがデータファイルがなく、`Load Game Disk` の表示で止まります。
+
+## 8080 命令テスト
+
+`Tests/Resources/cpu_tests/` の CP/M 用テストプログラムを、BDOS 呼び出し(0005h)だけを模擬するハーネスで実行します(`CPUExerciserTests`)。
+
+| テスト | 結果 |
+|---|---|
+| `TST8080.COM` | `CPU IS OPERATIONAL` |
+| `8080PRE.COM` | `8080 Preliminary tests complete` |
+| `CPUTEST.COM`(SuperSoft Diagnostic II) | `CPU TESTS OK`(255,651,553 クロック = 2MHz で約 128 秒。配布元の説明は「2MHz で約 2 分」) |
+| `8080EXM.COM`(全命令・フラグを CRC で照合) | 25 項目すべて `PASS`(23,803,378,391 クロック = 2MHz で約 3.3 時間分、リリースビルドで約 318 秒) |
+
+8080EXM は時間がかかるので、環境変数を付けたときだけ実行します。
+
+```bash
+RUN_8080EXM=1 swift test -c release -Xswiftc -enable-testing --filter CPUExerciserTests/test8080EXM
+```

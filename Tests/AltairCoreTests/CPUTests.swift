@@ -70,7 +70,7 @@ final class CPUTests: XCTestCase {
         m.onSerialOutput = { out.append($0) }
         runUntilHalt(m)
         XCTAssertEqual(String(decoding: out, as: UTF8.self), "HELLO, ALTAIR\r\n")
-        XCTAssertFalse(m.running)
+        XCTAssertTrue(m.cpu.halted)
     }
 
     func testEchoProgram() {

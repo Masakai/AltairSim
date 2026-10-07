@@ -60,6 +60,20 @@ struct ContentView: View {
                         model.loadDemo("LEDテスト(HLTA)", LEDTestPrograms.halt, autorun: true)
                     }
                 }
+                Menu("8080 テスト") {
+                    Button("TST8080(CPU 診断、数ミリ秒)") {
+                        model.runCPUTest("TST8080.COM", title: "TST8080", fast: false)
+                    }
+                    Button("8080PRE(前段テスト、数ミリ秒)") {
+                        model.runCPUTest("8080PRE.COM", title: "8080PRE", fast: false)
+                    }
+                    Button("CPUTEST(SuperSoft、2MHz で約 2 分)") {
+                        model.runCPUTest("CPUTEST.COM", title: "CPUTEST", fast: false)
+                    }
+                    Button("8080EXM(全命令の CRC 照合、最速で数十分〜数時間)") {
+                        model.runCPUTest("8080EXM.COM", title: "8080EXM", fast: true)
+                    }
+                }
                 Button("ファイルを読み込む(.hex / .bin)…", action: model.loadFile)
                 Spacer()
             }

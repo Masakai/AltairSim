@@ -9,7 +9,8 @@ let package = Package(
         .executableTarget(
             name: "AltairSim",
             dependencies: ["AltairCore"],
-            resources: [.copy("Resources/roms"), .copy("Resources/disks")],
+            exclude: ["Resources/README.md"],
+            resources: [.copy("Resources/roms"), .copy("Resources/disks"), .copy("Resources/cpu_tests")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
