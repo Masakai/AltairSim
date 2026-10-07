@@ -1,0 +1,91 @@
+import AltairCore
+import AppKit
+import SwiftUI
+
+@main
+struct AltairSimApp: App {
+    @StateObject private var model = SimulatorModel()
+
+    init() {
+        NSApplication.shared.setActivationPolicy(.regular)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    var body: some Scene {
+        WindowGroup("Altair 8800 Simulator") {
+            ContentView(model: model)
+                .frame(minWidth: 820, minHeight: 640)
+        }
+        .defaultSize(width: 1560, height: 760)
+    }
+}
+
+struct ContentView: View {
+    @ObservedObject var model: SimulatorModel
+
+    /// パネル、読み込みボタン、速度設定、状態表示の左カラム
+    private var controlColumn: some View {
+        VStack(spacing: 12) {
+            FrontPanelView(model: model)
+            HStack {
+                Button("BASIC 8K ROM で起動", action: model.bootBasicROM)
+                Button("CP/M 2.2 で起動", action: model.bootCPM)
+                Menu("ディスク") {
+                    ForEach(0..<SimulatorModel.visibleDrives, id: \.self) { d in
+                        let name = String(UnicodeScalar(UInt8(65 + d)))
+                        Button("ドライブ \(name) にディスクを装着…") { model.mountDisk(drive: d) }
+                    }
+                    Divider()
+                    ForEach(0..<SimulatorModel.visibleDrives, id: \.self) { d in
+                        let name = String(UnicodeScalar(UInt8(65 + d)))
+                        Button("ドライブ \(name) を取り外す") { model.ejectDisk(drive: d) }
+                    }
+                }
+                Menu("デモを読み込む") {
+                    Button("ECHO(受信文字をそのまま返す)") { model.loadDemo("ECHO", DemoPrograms.echo) }
+                    Button("HELLO(文字列を出力して HLT)") { model.loadDemo("HELLO", DemoPrograms.hello) }
+                    Divider()
+                    Button("LEDテスト: アドレス(A8-A15 を歩くビット)") {
+                        model.loadDemo("LEDテスト(アドレス)", LEDTestPrograms.address, autorun: true)
+                    }
+                    Button("LEDテスト: データ(D0-D7 のパターン)") {
+                        model.loadDemo("LEDテスト(データ)", LEDTestPrograms.data, autorun: true)
+                    }
+                    Button("LEDテスト: ステータス(INTE→STACK→INP→OUT→WO)") {
+                        model.loadDemo("LEDテスト(ステータス)", LEDTestPrograms.status, autorun: true)
+                    }
+                    Button("LEDテスト: HLTA(HLT で停止)") {
+                        model.loadDemo("LEDテスト(HLTA)", LEDTestPrograms.halt, autorun: true)
+                    }
+                }
+                Button("ファイルを読み込む(.hex / .bin)…", action: model.loadFile)
+                Spacer()
+            }
+            TerminalControls(model: model)
+            DiskDriveView(model: model, first: 0)
+            DiskDriveView(model: model, first: 2)
+            Text(model.statusMessage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, minHeight: 32, alignment: .topLeading)
+            Spacer(minLength: 0)
+        }
+    }
+
+    var body: some View {
+        // 幅があるときは左にパネル、右に端末。狭いときは縦に積む。
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 16) {
+                controlColumn.frame(minWidth: 780, idealWidth: 860)
+                TerminalView(model: model).frame(minWidth: 520, idealWidth: 640, maxHeight: .infinity, alignment: .top)
+            }
+            .frame(minWidth: 1340)
+            VStack(spacing: 12) {
+                controlColumn
+                TerminalView(model: model)
+            }
+        }
+        .padding(16)
+    }
+}
