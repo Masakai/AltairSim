@@ -252,21 +252,32 @@ final class SimulatorModel: ObservableObject {
         return dest
     }
 
-    /// 88-DCDD ブートローダ ROM(FF00h)でドライブ A から CP/M を起動する。
+    /// 88-DCDD ブートローダ ROM(FF00h)でドライブ A から CP/M 2.2 を起動する。
     func bootCPM() {
+        bootFromDisks([("cpm22b23-56k.dsk", 0)], label: "CP/M 2.2")
+    }
+
+    /// CP/M 3(ドライブ A = システムディスク、B = ユーティリティディスク)を起動する。
+    func bootCPM3() {
+        bootFromDisks([("cpm3_v1.0_56K_disk1.dsk", 0), ("cpm3_v1.0_56k_disk2.dsk", 1)], label: "CP/M 3")
+    }
+
+    private func bootFromDisks(_ files: [(name: String, drive: Int)], label: String) {
         do {
-            let url = try workingCopy(of: "cpm22b23-56k.dsk")
-            let disk = try DiskImage(contentsOf: url)
             guard let dir = Bundle.module.resourceURL?.appendingPathComponent("roms") else { return }
             let dbl = [UInt8](try Data(contentsOf: dir.appendingPathComponent("88dskrom.bin")))
+            var paths: [String] = []
 
             machine.stop()
             machine.removeROMs()
             machine.setRAMSize(0x10000)
             machine.clearMemory()
-            machine.disks.unmount(drive: 0)
-            machine.disks.mount(disk, drive: 0)
-            refreshDrives()
+            for d in 0..<Self.visibleDrives { machine.disks.unmount(drive: d) }
+            for f in files {
+                let url = try workingCopy(of: f.name)
+                machine.disks.mount(try DiskImage(contentsOf: url), drive: f.drive)
+                paths.append(url.path)
+            }
             machine.disks.reset()
             machine.loadROM(dbl, at: 0xFF00)
             clearTerminal()
@@ -275,9 +286,9 @@ final class SimulatorModel: ObservableObject {
             machine.examine()
             machine.start()
             refresh()
-            statusMessage = "CP/M 2.2 をドライブ A から起動します(ディスクの変更は \(url.path) に保存されます)"
+            statusMessage = "\(label) をドライブ A から起動します(ディスクの変更は \(paths.first ?? "") などの作業用コピーに保存されます)"
         } catch {
-            statusMessage = "CP/M の起動に失敗: ディスクイメージが見つかりません(\(error))"
+            statusMessage = "\(label) の起動に失敗: ディスクイメージが見つかりません(\(error))"
         }
     }
 

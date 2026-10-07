@@ -30,6 +30,7 @@ struct ContentView: View {
             HStack {
                 Button("BASIC 8K ROM で起動", action: model.bootBasicROM)
                 Button("CP/M 2.2 で起動", action: model.bootCPM)
+                Button("CP/M 3 で起動", action: model.bootCPM3)
                 Menu("ディスク") {
                     ForEach(0..<SimulatorModel.visibleDrives, id: \.self) { d in
                         let name = String(UnicodeScalar(UInt8(65 + d)))
