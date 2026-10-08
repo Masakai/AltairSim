@@ -283,6 +283,7 @@ final class SimulatorModel: ObservableObject {
             machine.reset()  // 前回の HLT 状態などを解除(RESET)
             machine.removeROMs()
             machine.setRAMSize(0x8000)
+            machine.clearMemory()  // 前のプログラムのメモリが残っていると BASIC が起動しない(電源投入時は 0)
             deleteKey = .underscore  // Altair BASIC は 08h を削除として扱わない
             var address: UInt16 = 0xE000
             for name in names {
