@@ -150,6 +150,55 @@ final class SimulatorModel: ObservableObject {
         dataLED = machine.lastData
     }
 
+    // MARK: 16 進入力
+
+    /// スイッチの現在値(16 進 4 桁)。
+    var switchesHex: String { String(format: "%04X", switches) }
+
+    /// 16 進文字列(例: "FF00"、"0x3E")をスイッチに反映する。解釈できないときは false。
+    @discardableResult
+    func setSwitches(hex: String) -> Bool {
+        let t = hex.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "0x", with: "")
+        guard !t.isEmpty, t.count <= 4, let v = UInt16(t, radix: 16) else {
+            statusMessage = "スイッチ値は 16 進 1〜4 桁で入力してください(例: FF00)"
+            return false
+        }
+        switches = v
+        return true
+    }
+
+    /// 「番地: バイト列」を、パネルの EXAMINE → DEPOSIT → DEPOSIT NEXT … と同じ手順で書き込む。
+    /// 例: `0000: 3E 01 76`。RUN 中は STOP してから書き込み、書き込み後は番地を先頭に戻す。
+    func depositHex(_ text: String) {
+        guard powered else { statusMessage = "電源が OFF です"; return }
+        let parts = text.split(separator: ":", maxSplits: 1).map { String($0).trimmingCharacters(in: .whitespaces) }
+        guard parts.count == 2, let address = UInt16(parts[0].replacingOccurrences(of: "0x", with: ""), radix: 16) else {
+            statusMessage = "書式は「番地: バイト列」です(例: 0000: 3E 01 76)"
+            return
+        }
+        let tokens = parts[1].split(whereSeparator: { $0 == " " || $0 == "," }).map(String.init)
+        let bytes = tokens.compactMap { UInt8($0.replacingOccurrences(of: "0x", with: ""), radix: 16) }
+        guard !bytes.isEmpty, bytes.count == tokens.count else {
+            statusMessage = "バイト列は 16 進 2 桁を空白かカンマで区切ってください(例: 3E 01 76)"
+            return
+        }
+        let wasRunning = machine.running
+        machine.stop()
+        switches = address
+        machine.examine()
+        for (i, b) in bytes.enumerated() {
+            switches = UInt16(b)
+            if i == 0 { machine.deposit() } else { machine.depositNext() }
+        }
+        switches = address
+        machine.examine()
+        refresh()
+        let unwritable = bytes.indices.filter { machine.kinds[(Int(address) + $0) & 0xFFFF] != .ram }
+        statusMessage = String(format: "%04X から %d バイトを書き込みました", address, bytes.count)
+            + (unwritable.isEmpty ? "" : "(RAM でない番地 \(unwritable.count) バイトは書き込まれません)")
+            + (wasRunning ? "。実行を止めました(RUN で再開)" : "")
+    }
+
     // MARK: パネル操作
 
     func toggleSwitch(_ bit: Int) { switches ^= (1 << UInt16(bit)) }

@@ -78,6 +78,7 @@ struct ContentView: View {
                 Spacer()
             }
             TerminalControls(model: model)
+            HexEntryView(model: model)
             DiskDriveView(model: model, first: 0)
             DiskDriveView(model: model, first: 2)
             Text(model.statusMessage)
@@ -103,5 +104,32 @@ struct ContentView: View {
             }
         }
         .padding(16)
+    }
+}
+
+/// 16 進での入力補助。スイッチ値の設定と、バイト列の一括書き込み。
+struct HexEntryView: View {
+    @ObservedObject var model: SimulatorModel
+    @State private var switchText = ""
+    @State private var depositText = "0000: 3E 01 76"
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("スイッチ").font(.caption)
+            TextField("FF00", text: $switchText)
+                .font(.system(.body, design: .monospaced))
+                .frame(width: 64)
+                .onSubmit { if model.setSwitches(hex: switchText) { switchText = model.switchesHex } }
+            Button("設定") { if model.setSwitches(hex: switchText) { switchText = model.switchesHex } }
+            Divider().frame(height: 18)
+            Text("書き込み").font(.caption)
+            TextField("0000: 3E 01 76", text: $depositText)
+                .font(.system(.body, design: .monospaced))
+                .onSubmit { model.depositHex(depositText) }
+            Button("書き込む") { model.depositHex(depositText) }
+                .help("EXAMINE → DEPOSIT → DEPOSIT NEXT … と同じ手順で RAM に書き込みます")
+        }
+        .onAppear { switchText = model.switchesHex }
+        .onChange(of: model.switches) { _, _ in switchText = model.switchesHex }
     }
 }
