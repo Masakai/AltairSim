@@ -60,4 +60,20 @@ final class DiskOS680Tests: XCTestCase {
         XCTAssertTrue(text().contains("CP68    .SYS"), text())
         print("--- CP/68 boot ---\n\(text())\n--- pc=\(String(m.cpu.pc, radix: 16)) illegal=\(m.cpu.illegalCount) ---")
     }
+
+    /// FLEX のディスクに入っている BASIC.CMD(59 セクタ)を起動して、プログラムを走らせる
+    func testFLEXBasicRunsAProgram() throws {
+        let (m, image, text) = try boot(image: "flex3-680.dsk")
+        XCTAssertTrue(FLEXImage.linkBootLoader(image))
+        func send(_ s: String, cycles: Int) { for u in s.utf8 { m.sendSerial(u) }; m.run(cycles: cycles) }
+        m.run(cycles: 20_000_000)
+        send("10,08,26\r", cycles: 3_000_000)
+        send("BASIC\r", cycles: 30_000_000)
+        XCTAssertTrue(text().contains("READY"), text())
+        send("PRINT 2+3\r", cycles: 5_000_000)
+        send("10 FOR I=1 TO 5:PRINT I*I;:NEXT I\r", cycles: 5_000_000)
+        send("RUN\r", cycles: 10_000_000)
+        XCTAssertTrue(text().contains(" 5 "), text())
+        XCTAssertTrue(text().contains(" 1  4  9  16  25 "), text())
+    }
 }
