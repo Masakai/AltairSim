@@ -7,7 +7,7 @@ final class DiskOS680Tests: XCTestCase {
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("Sources/AltairSim/Resources/altair680")
 
-    private func boot(image name: String, speed: Int = 500_000) throws -> (Altair680Machine, DiskImage, () -> String) {
+    private func boot(image name: String, bytes override: [UInt8]? = nil, speed: Int = 500_000) throws -> (Altair680Machine, DiskImage, () -> String) {
         let files = ["monitor/SWIMON.S19", "boot/BOOT.S19", "disks/\(name)"]
         for f in files where !FileManager.default.fileExists(atPath: base.appendingPathComponent(f).path) {
             throw XCTSkip("\(f) がありません")
@@ -17,7 +17,7 @@ final class DiskOS680Tests: XCTestCase {
         try m.loadS19(String(contentsOf: base.appendingPathComponent("monitor/SWIMON.S19"), encoding: .utf8))
         try m.loadS19(String(contentsOf: base.appendingPathComponent("boot/BOOT.S19"), encoding: .utf8))
         // 書き込みで元ファイルを変えないよう、メモリ上のコピーを使う
-        let image = try DiskImage(bytes: [UInt8](try Data(contentsOf: base.appendingPathComponent("disks/\(name)"))), geometry: .ibm3740)
+        let image = try DiskImage(bytes: override ?? [UInt8](try Data(contentsOf: base.appendingPathComponent("disks/\(name)"))), geometry: .ibm3740)
         m.disks.mount(image, drive: 0)
         var out = [UInt8]()
         m.onSerialOutput = { out.append($0 & 0x7F) }
@@ -102,5 +102,59 @@ final class DiskOS680Tests: XCTestCase {
         let mark3 = text().count
         send("RUN\r", cycles: 10_000_000)
         XCTAssertTrue(String(text().dropFirst(mark3)).contains(" 1  4  9  16  25 "))
+    }
+
+    /// SAVE したディスクを別の機械で起動し直しても、ファイルが残っていて LOAD できる(アプリを閉じて開き直した状態)
+    func testSavedFileSurvivesReboot() throws {
+        let (m, image, _) = try boot(image: "flex3-680.dsk")
+        XCTAssertTrue(FLEXImage.linkBootLoader(image))
+        func send(_ m: Altair680Machine, _ s: String, cycles: Int = 6_000_000) { for u in s.utf8 { m.sendSerial(u) }; m.run(cycles: cycles) }
+        m.run(cycles: 20_000_000)
+        send(m, "10,08,26\r", cycles: 3_000_000)
+        send(m, "BASIC\r", cycles: 30_000_000)
+        send(m, "10 FOR I=1 TO 5:PRINT I*I;:NEXT I\r")
+        send(m, "SAVE \"SQUARES\"\r", cycles: 20_000_000)
+        XCTAssertNotNil(FLEXImage.findFile(image, name: "SQUARES", ext: "BAS"))
+
+        // ファイルに書き出して読み直す(DiskImage.flush の経路)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("flex-persist-\(UUID().uuidString).dsk")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data(image.bytes).write(to: url)
+        let reread = [UInt8](try Data(contentsOf: url))
+        XCTAssertEqual(reread, image.bytes)
+
+        let (m2, image2, text2) = try boot(image: "flex3-680.dsk", bytes: reread)
+        XCTAssertNotNil(FLEXImage.findFile(image2, name: "SQUARES", ext: "BAS"), "再起動後もディレクトリに残る")
+        m2.run(cycles: 20_000_000)
+        send(m2, "10,08,26\r", cycles: 3_000_000)
+        send(m2, "CAT\r", cycles: 20_000_000)
+        XCTAssertTrue(text2().contains("SQUARES"), "CAT に出る: \(text2())")
+        send(m2, "BASIC\r", cycles: 30_000_000)
+        send(m2, "LOAD \"SQUARES\"\r", cycles: 20_000_000)
+        let mark = text2().count
+        send(m2, "RUN\r", cycles: 10_000_000)
+        XCTAssertTrue(String(text2().dropFirst(mark)).contains(" 1  4  9  16  25 "))
+    }
+
+    /// CP/68 の PIP でファイルをコピー(ディスクへの書き込み)し、DIR に載る
+    func testCP68PipWritesFile() throws {
+        let (m, image, text) = try boot(image: "cp68-altair680.dsk")
+        m.run(cycles: 40_000_000)
+        XCTAssertTrue(text().contains("CP/68"), text())
+        let before = image.bytes
+        // PIP は起動すると PIP- のプロンプトに入ったままになるので、その中で続けてコマンドを打つ
+        for cmd in ["PIP COPY1.SYS=CP68.SYS\r", "COPY2.SYS=COPY1.SYS\r"] {
+            for u in cmd.utf8 { m.sendSerial(u) }
+            m.run(cycles: 60_000_000)
+        }
+        print("--- CP/68 PIP ---\n\(text())\n---")
+        XCTAssertNotEqual(image.bytes, before, "ディスクが書き換わった")
+        let dir = Array("COPY1   SYS".utf8)
+        func contains(_ needle: [UInt8]) -> Bool {
+            image.bytes.indices.dropLast(needle.count).contains { i in Array(image.bytes[i..<i + needle.count]) == needle }
+        }
+        XCTAssertTrue(contains(dir) || contains(Array("COPY1".utf8)), "ディレクトリに COPY1 が載る")
+        XCTAssertEqual(text().components(separatedBy: " DONE").count - 1, 2, "コピー 2 回(書いたファイルを読み戻せた): \(text())")
+        XCTAssertFalse(text().contains("ERROR"), text())
     }
 }
