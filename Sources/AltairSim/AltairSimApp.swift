@@ -24,7 +24,51 @@ struct ContentView: View {
     @ObservedObject var model: SimulatorModel
 
     /// パネル、読み込みボタン、速度設定、状態表示の左カラム
+    private var computerPicker: some View {
+        HStack {
+            Picker("機種", selection: Binding(get: { model.computer }, set: { model.selectComputer($0) })) {
+                ForEach(SimulatorModel.Computer.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 280)
+            Spacer()
+        }
+    }
+
     private var controlColumn: some View {
+        VStack(spacing: 12) {
+            computerPicker
+            if model.computer == .altair680b {
+                column680
+            } else {
+                column8800
+            }
+            Text(model.statusMessage)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, minHeight: 32, alignment: .topLeading)
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// Altair 680b: パネルと、モニタ・BASIC の起動ボタン(ディスクはない)
+    private var column680: some View {
+        VStack(spacing: 12) {
+            FrontPanel680View(model: model)
+            HStack {
+                Button("モニタ起動", action: { model.boot680b(withTerminal: true) })
+                    .help("PROM モニタを起動して「.」のプロンプトを出す")
+                Button("BASIC を読み込んで起動", action: model.load680BASIC)
+                    .help("紙テープ版 BASIC を、モニタの L コマンドで読み込んで J 0000 で起動")
+                Toggle("端末なし(フロントパネル運用)", isOn: $model.noTerminal680).font(.caption)
+                Spacer()
+            }
+            TerminalControls(model: model)
+        }
+    }
+
+    private var column8800: some View {
         VStack(spacing: 12) {
             FrontPanelView(model: model)
             HStack {
@@ -81,12 +125,6 @@ struct ContentView: View {
             HexEntryView(model: model)
             DiskDriveView(model: model, first: 0)
             DiskDriveView(model: model, first: 2)
-            Text(model.statusMessage)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, minHeight: 32, alignment: .topLeading)
-            Spacer(minLength: 0)
         }
     }
 

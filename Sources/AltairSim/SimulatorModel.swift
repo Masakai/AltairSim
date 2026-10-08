@@ -51,12 +51,31 @@ final class SimulatorModel: ObservableObject {
 
     /// 実機の構成に合わせて RAM は 32KB。E000h 以降は ROM 用に空ける。
     let machine = AltairMachine(ramSize: 0x8000)
+    /// 動かす機種。端末は共用で、パネルとディスクは機種ごとに変わる。
+    enum Computer: String, CaseIterable, Identifiable {
+        case altair8800 = "Altair 8800"
+        case altair680b = "Altair 680b"
+        var id: String { rawValue }
+    }
+    @Published var computer: Computer = .altair8800
+
+    // Altair 680b(Motorola 6800)
+    let machine680 = Altair680Machine(ramSize: 0x2000)
+    @Published var sw680Address: UInt16 = 0 { didSet { machine680.addressSwitches = sw680Address } }
+    @Published var sw680Data: UInt8 = 0 { didSet { machine680.dataSwitches = sw680Data } }
+    @Published var led680Address: UInt16 = 0
+    @Published var led680Data: UInt8 = 0
+    @Published var run680 = false
+    /// 「端末なし」ストラップ。true だとモニタはリセット後に 0000 番地へ飛ぶ(フロントパネルだけで使う構成)
+    @Published var noTerminal680 = false { didSet { machine680.noTerminal = noTerminal680 } }
+    private var monitor680Loaded = false
+
     private var timer: Timer?
     private var lastTick = ProcessInfo.processInfo.systemUptime
     private var cycleDebt = 0.0
 
     enum CPUSpeed: String, CaseIterable, Identifiable {
-        case realTime = "2MHz(実機)"
+        case realTime = "実機の速度"
         case fast = "最速"
         var id: String { rawValue }
     }
@@ -77,7 +96,7 @@ final class SimulatorModel: ObservableObject {
 
     @Published var cpuSpeed: CPUSpeed = .realTime
     @Published var baud: Baud = Baud.all[0] {
-        didSet { machine.baudRate = baud.rate }
+        didSet { machine.baudRate = baud.rate; machine680.baudRate = baud.rate }
     }
     private static let ticksPerSecond = 60
 
@@ -90,6 +109,9 @@ final class SimulatorModel: ObservableObject {
         machine.onSerialOutput = { [weak self] byte in
             self?.appendTerminal(byte)
         }
+        machine680.onSerialOutput = { [weak self] byte in
+            self?.appendTerminal(byte)
+        }
         timer = Timer.scheduledTimer(withTimeInterval: 1.0 / Double(Self.ticksPerSecond), repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
@@ -100,6 +122,10 @@ final class SimulatorModel: ObservableObject {
         // 一時停止や画面スリープ後に大量の命令を一気に実行しないよう、経過時間は 0.1 秒で頭打ちにする
         let elapsed = min(now - lastTick, 0.1)
         lastTick = now
+        if computer == .altair680b {
+            tick680(elapsed: elapsed, now: now)
+            return
+        }
         if powered && machine.running {
             switch cpuSpeed {
             case .realTime:
@@ -142,6 +168,12 @@ final class SimulatorModel: ObservableObject {
     }
 
     private func refresh() {
+        if computer == .altair680b {
+            run680 = machine680.running
+            led680Address = machine680.addressLEDs
+            led680Data = machine680.dataLEDs
+            return
+        }
         refreshDrives()
         running = machine.running
         status = machine.status
@@ -204,6 +236,13 @@ final class SimulatorModel: ObservableObject {
     func toggleSwitch(_ bit: Int) { switches ^= (1 << UInt16(bit)) }
     func clearSwitches() { switches = 0 }
     func setPower(_ on: Bool) {
+        if computer == .altair680b {
+            if on && !powered { machine680.reset() }
+            powered = on
+            if !on { machine680.setRunning(false) }
+            refresh()
+            return
+        }
         if on && !powered { machine.reset() }  // 電源投入時は PC = 0、HLT 状態も解除
         powered = on
         if !on { machine.stop() }
@@ -232,7 +271,7 @@ final class SimulatorModel: ObservableObject {
         for scalar in characters.unicodeScalars where scalar.isASCII {
             var v = UInt8(scalar.value)
             if uppercaseInput, v >= 0x61, v <= 0x7A { v -= 0x20 }
-            machine.sendSerial(v)
+            sendSerial(v)
         }
     }
 
@@ -249,14 +288,14 @@ final class SimulatorModel: ObservableObject {
         }
     }
 
-    func typeReturn() { machine.sendSerial(0x0D) }
+    func typeReturn() { sendSerial(0x0D) }
     /// 削除キー。既定は BS(^H)で、CP/M は「BS-SP-BS」で画面上の文字を消す。
     /// DEL(7Fh)だと CP/M は削除した文字をそのままエコーする。Altair BASIC は 5Fh か 7Fh だけを削除として扱い、
     /// 08h は削除にならない(ROM で確認済み)ので、BASIC を起動したときは自動で '_' に切り替える。
-    func typeBackspace() { machine.sendSerial(deleteKey.code) }
+    func typeBackspace() { sendSerial(deleteKey.code) }
 
     /// 前方削除(fn + delete)は、ADM-3A の RUB OUT キーにあたる 7Fh を送る。
-    func typeRubout() { machine.sendSerial(0x7F) }
+    func typeRubout() { sendSerial(0x7F) }
     func clearTerminal() { screen = TerminalScreen() }
 
     // MARK: プログラム読み込み
@@ -436,4 +475,91 @@ final class SimulatorModel: ObservableObject {
             statusMessage = "読み込み失敗: \(error)"
         }
     }
+
+    // MARK: Altair 680b
+
+    private func tick680(elapsed: Double, now: TimeInterval) {
+        if powered && machine680.running {
+            switch cpuSpeed {
+            case .realTime:
+                cycleDebt += elapsed * Double(Altair680Machine.clockHz)
+                let used = machine680.run(cycles: Int(cycleDebt))
+                cycleDebt -= Double(used)
+            case .fast:
+                while machine680.running && ProcessInfo.processInfo.systemUptime - now < 0.008 {
+                    machine680.run(cycles: 20_000)
+                }
+                cycleDebt = 0
+            }
+        } else {
+            cycleDebt = 0
+        }
+        refresh()
+    }
+
+    /// 端末への 1 バイト入力を、動かしている機種へ送る
+    func sendSerial(_ byte: UInt8) {
+        if computer == .altair680b { machine680.sendSerial(byte) } else { machine.sendSerial(byte) }
+    }
+
+    func selectComputer(_ next: Computer) {
+        guard next != computer else { return }
+        machine.stop()
+        machine680.setRunning(false)
+        computer = next
+        cycleDebt = 0
+        if next == .altair680b {
+            boot680b(withTerminal: true)
+        } else {
+            bootCPM()
+        }
+    }
+
+    /// 680b の PROM モニタ(ACIA 版、FF00〜)を載せて、リセットして RUN にする。
+    /// withTerminal = false は「端末なし」ストラップで、モニタは 0000 番地へ飛ぶ(フロントパネル運用)。
+    func boot680b(withTerminal: Bool) {
+        guard let dir = Bundle.module.resourceURL?.appendingPathComponent("altair680") else { return }
+        do {
+            if !monitor680Loaded {
+                let text = try String(contentsOf: dir.appendingPathComponent("monitor/MON680.S19"), encoding: .utf8)
+                try machine680.loadS19(text)
+                monitor680Loaded = true
+            }
+            machine680.setRunning(false)
+            machine680.clearMemory()
+            noTerminal680 = !withTerminal
+            deleteKey = .underscore  // Altair BASIC(680)も 8800 版と同じく '_' で 1 文字削除
+            clearTerminal()
+            powered = true
+            machine680.reset()
+            machine680.setRunning(true)
+            refresh()
+            statusMessage = withTerminal
+                ? "680b のモニタを起動しました(プロンプトは「.」。M で表示と書き込み、J で実行、L でテープ読み込み)"
+                : "680b を「端末なし」で起動しました(リセット後は 0000 番地から実行します)"
+        } catch {
+            statusMessage = "680b のモニタの読み込みに失敗: \(error)"
+        }
+    }
+
+    /// 紙テープ版の BASIC(S レコード)を、モニタの L コマンドで読み込んで起動する。
+    /// 読み込みはシリアルから流し込むので、速度設定に応じて数秒かかる。
+    func load680BASIC() {
+        guard let dir = Bundle.module.resourceURL?.appendingPathComponent("altair680") else { return }
+        do {
+            let url = dir.appendingPathComponent("basic/paper-basic-v1.1-r3.2.s19")
+            let tape = try String(contentsOf: url, encoding: .utf8).replacingOccurrences(of: "\r\n", with: "\n")
+            boot680b(withTerminal: true)
+            for u in ("L" + tape + "J0000").utf8 { machine680.sendSerial(u) }
+            statusMessage = "BASIC をモニタの L コマンドで読み込んで起動します(MEMORY SIZE? は Return、TERMINAL WIDTH? は Return、WANT SIN-COS-TAN-ATN? は N)"
+        } catch {
+            statusMessage = "BASIC の読み込みに失敗: \(error)"
+        }
+    }
+
+    func toggle680Address(_ bit: Int) { sw680Address ^= (1 << UInt16(bit)); refresh() }
+    func toggle680Data(_ bit: Int) { sw680Data ^= (1 << UInt8(bit)); refresh() }
+    func panel680Reset() { guard powered else { return }; machine680.reset(); refresh() }
+    func panel680SetRun(_ run: Bool) { guard powered else { return }; machine680.setRunning(run); refresh() }
+    func panel680Deposit() { guard powered else { return }; machine680.deposit(); refresh() }
 }

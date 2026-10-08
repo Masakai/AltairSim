@@ -76,7 +76,7 @@ struct TerminalView: View {
                 case (.return, _): model.typeReturn()
                 default:
                     if press.modifiers.contains(.control), let c = press.characters.unicodeScalars.first {
-                        model.machine.sendSerial(UInt8(c.value & 0x1F))
+                        model.sendSerial(UInt8(c.value & 0x1F))
                     } else {
                         model.typeKey(press.characters)
                     }
