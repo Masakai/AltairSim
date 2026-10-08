@@ -46,3 +46,13 @@ Altair 680(Motorola 6800 搭載)をシミュレータに加えるための調査
 - 割り込みベクタは RAM 経由: `MIVEC` = $0100(IRQ)、`NMIVEC` = $0104(NMI)
 - モニタの変数は $00F1 から(スタック底、BRKADR、ECHO、EXTFLG、BUFULL、SAVSTK、TEMP、BYTECT、XHI、XLOW…)
 - BASIC の S レコード(紙テープ版)は 429 行、アドレス 0000 から読み込む。最終レコードで $00F3(ECHO)を 0 に戻す
+
+## クロック(2026-10-08 追記、一次資料で確認)
+
+680b Theory of Operation(deramp.com の `Altair 680b 99- theory of operation.pdf`、OCR で確認)の記述:
+
+- 「The system clock is a 500 KHz asymmetrical, two phase, non-overlapping clock」
+- 2MHz の水晶で astable multi-vibrator が発振し、J-K フリップフロップ 2 個(ジョンソンカウンタ)と NOR 4 個で Phase 1 / Phase 2 を作る。「With a divide factor of four, this circuit produces a clock frequency of 500 KHz」
+- Phase 1 は 600ns High / 1.4µs Low、Phase 2 は 1µs High / 1µs Low
+- データ転送は Phase 2 の間に行い、メモリと ACIA の有効化にも Phase 2 を使う
+- ボーレート発生器(Fairchild のプログラマブル・ビットレートジェネレータ)は別の 2.4576MHz の水晶。出力は設定ボーレートの 16 倍(9600 ボーなら 153.6kHz)

@@ -10,8 +10,10 @@
 /// - DEPOSIT でデータスイッチの値をその番地に書く。EXAMINE スイッチはない
 /// - RUN 中は CPU のバスの値を LED に出す(実機がこう表示するかは未確認)
 public final class Altair680Machine: Bus {
-    /// CPU クロック 500kHz(1 クロック = 2 マイクロ秒)。joewing.net の Altair 680 の記述による。
-    /// 基板上の水晶(2MHz を 4 分周、という説明)は、外部の資料では確認できていない。
+    /// CPU クロック 500kHz(1 クロック = 2 マイクロ秒)。
+    /// 680b Theory of Operation: 2MHz の水晶を 4 分周して 500kHz。Phase 1 は 600ns High / 1.4µs Low、
+    /// Phase 2 は 1µs High / 1µs Low。データ転送は Phase 2 で行う。
+    /// ボーレート用の水晶(2.4576MHz)は CPU のクロックとは別。
     public static let clockHz = 500_000
     public static let aciaControl: UInt16 = 0xF000
     public static let aciaData: UInt16 = 0xF001
