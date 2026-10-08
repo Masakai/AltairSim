@@ -57,6 +57,13 @@ struct ContentView: View {
         VStack(spacing: 12) {
             FrontPanel680View(model: model)
             HStack {
+                Toggle(isOn: Binding(get: { model.powered }, set: { model.setPower($0) })) {
+                    Label("電源(背面)", systemImage: "power")
+                }
+                .toggleStyle(.button)
+                .tint(model.powered ? .green : nil)
+                .help("680b の電源スイッチは背面パネルにあります(取扱説明書 p.14)。OFF で AC ランプが消えて CPU が止まり、ON で RESET 状態から始まります")
+                Divider().frame(height: 16)
                 Button("モニタ起動", action: { model.boot680b(withTerminal: true) })
                     .help("PROM モニタを起動して「.」のプロンプトを出す")
                 Button("BASIC を読み込んで起動", action: model.load680BASIC)
