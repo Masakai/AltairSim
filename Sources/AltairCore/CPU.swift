@@ -238,8 +238,22 @@ public final class CPU {
     @discardableResult
     public func step() -> Int {
         if halted { return 4 }
-        let op = fetchOpcode()
+        return execute(fetchOpcode())
+    }
 
+    /// 割り込み要求(INT)。INTE が立っているときだけ受け付け、HLT 状態を解除して、
+    /// データバスに載せられた命令(通常は RST n)を実行する。受け付けたら true。
+    /// INTE が 0 のときは何もせず false を返す(HLT 状態からは RESET でしか抜けられない)。
+    @discardableResult
+    public func interrupt(opcode: UInt8) -> Bool {
+        guard inte else { return false }
+        inte = false  // 受け付けると INTE は 0 になる
+        halted = false
+        _ = execute(opcode)  // PC は進めずに実行する(RST なら PC をスタックに積んで飛ぶ)
+        return true
+    }
+
+    private func execute(_ op: UInt8) -> Int {
         if op < 0x40 {
             return stepLow(op)
         }

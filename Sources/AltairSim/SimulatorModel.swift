@@ -139,6 +139,7 @@ final class SimulatorModel: ObservableObject {
     func toggleSwitch(_ bit: Int) { switches ^= (1 << UInt16(bit)) }
     func clearSwitches() { switches = 0 }
     func setPower(_ on: Bool) {
+        if on && !powered { machine.reset() }  // 電源投入時は PC = 0、HLT 状態も解除
         powered = on
         if !on { machine.stop() }
         refresh()
@@ -215,6 +216,7 @@ final class SimulatorModel: ObservableObject {
         guard let dir = Bundle.module.resourceURL?.appendingPathComponent("roms") else { return }
         do {
             machine.stop()
+            machine.reset()  // 前回の HLT 状態などを解除(RESET)
             machine.removeROMs()
             machine.setRAMSize(0x8000)
             var address: UInt16 = 0xE000
@@ -294,6 +296,7 @@ final class SimulatorModel: ObservableObject {
             var paths: [String] = []
 
             machine.stop()
+            machine.reset()  // 前回の HLT 状態などを解除(RESET)
             machine.removeROMs()
             machine.setRAMSize(0x10000)
             machine.clearMemory()

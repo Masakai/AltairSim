@@ -76,3 +76,13 @@ CP/M 3 の動作確認: `CP/M V3.0 Loader` から `CP/M 3 BIOS v1.0 for Altair 8
 ```bash
 RUN_8080EXM=1 swift test -c release -Xswiftc -enable-testing --filter CPUExerciserTests/test8080EXM
 ```
+
+## HLT の動作
+
+Intel 8080 データシート(2-13〜2-14 ページ、Table 2-1)に合わせています。
+
+- HLT を実行すると停止状態(HLTA)に入り、RUN スイッチは RUN のまま、HLTA が点灯、WAIT は消灯します。アドレス LED は HLT の次の番地、ステータスは HLTA + MEMR + WO(M1 は消灯)です
+- 抜けられるのは RESET(PC = 0)と、INTE が 1 のときの割り込みだけです。STOP → RUN や SINGLE STEP では解除されません
+- DI の後の HLT は RESET でしか抜けられません
+- 割り込みを起こすスイッチは実機のパネルにないので、内部関数(`AltairMachine.requestInterrupt`)としてテストから使えるようにしています。HOLD は未実装です
+- データ LED は、HLT 命令の値(76h)のままです。実機では M2 サイクルの途中でデータバスがフローティングになるため、パネルでの見え方は確認していません

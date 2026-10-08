@@ -153,22 +153,40 @@ public final class AltairMachine: Bus {
 
     // MARK: 実行
 
-    /// 指定クロック数ぶん実行する。HLT で停止状態になったら running を落として戻る。
-    /// 実際に消費したクロック数を返す(1 命令ぶん超過することがある)。
+    /// 指定クロック数ぶん実行する。実際に消費したクロック数を返す(1 命令ぶん超過することがある)。
+    ///
+    /// HLT を実行すると、8080 は次のマシンサイクルの T2 で停止状態(HLTA)に入る。
+    /// 抜けられるのは RESET、HOLD、INTE が 1 のときの割り込みだけ(8080 データシート 2-13 ページ)。
+    /// RUN スイッチは RUN のままで、HLTA が点灯し、WAIT は消灯する。停止中も時間は進む。
     @discardableResult
     public func run(cycles budget: Int) -> Int {
         var used = 0
         while running && used < budget {
+            if cpu.halted {
+                let idle = budget - used
+                used += idle
+                cycleCounter += idle
+                showHalt()
+                break
+            }
             let c = cpu.step()
             used += c
             cycleCounter += c
-            if cpu.halted {
-                // HLT 後は実機と同じく RUN のまま(HLTA が点灯し、WAIT は消灯)。クロックは消費しない。
-                status = [.hlta, .memr, .wo]
-                break
-            }
+            if cpu.halted { showHalt() }
         }
         return used
+    }
+
+    /// HLT 状態の表示。M2 サイクルのアドレスは HLT の次の番地(PC)、ステータスは HLTA + MEMR(WO は非書き込み)。
+    private func showHalt() {
+        status = [.hlta, .memr, .wo]
+        lastAddress = cpu.pc
+    }
+
+    /// 割り込み要求。INTE が 1 のときだけ受け付けて true を返し、HLT 状態も解除する。
+    @discardableResult
+    public func requestInterrupt(opcode: UInt8) -> Bool {
+        cpu.interrupt(opcode: opcode)
     }
 
     // MARK: フロントパネル操作
@@ -180,13 +198,12 @@ public final class AltairMachine: Bus {
     public func stop() {
         guard running else { return }
         running = false
-        status = [.memr, .wo]
         showCurrent()
     }
 
+    /// RUN。HLT 状態のままなら、RUN にしても HLT 状態は解除されない(RESET か割り込みが必要)。
     public func start() {
         guard !running else { return }
-        cpu.halted = false
         running = true
     }
 
@@ -197,14 +214,17 @@ public final class AltairMachine: Bus {
 
     public func singleStep() {
         guard !running else { return }
-        cpu.halted = false
+        if cpu.halted {  // HLT 状態は SINGLE STEP では抜けられない
+            showHalt()
+            return
+        }
         cycleCounter += cpu.step()
         if cpu.halted {
-            cpu.halted = false
-            status = [.hlta, .memr, .wo]
+            showHalt()
+        } else {
+            lastAddress = cpu.pc
+            lastData = peek(cpu.pc)
         }
-        lastAddress = cpu.pc
-        lastData = peek(cpu.pc)
     }
 
     public func examine() {
@@ -240,7 +260,11 @@ public final class AltairMachine: Bus {
     }
 
     private func showCurrent() {
-        if !running { status = [.memr, .wo] }
+        if cpu.halted {
+            status = [.hlta, .memr, .wo]
+        } else if !running {
+            status = [.memr, .wo]
+        }
         lastAddress = cpu.pc
         lastData = peek(cpu.pc)
     }
