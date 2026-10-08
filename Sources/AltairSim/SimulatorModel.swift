@@ -35,6 +35,7 @@ final class SimulatorModel: ObservableObject {
     @Published var statusMessage = ""
     /// ライブラリ(利用者が取り込んだ ROM・ディスクイメージ)の変更通知用。取り込み・削除のたびに増やす
     @Published var libraryRevision = 0
+    @Published var userItems: [UserItem] = []
     var library: AssetLibrary { AssetLibrary.shared }
     /// 端末のキーボード飾りで光らせているキー(ラベル)
     /// ディスクドライブ A・B の表示用状態
@@ -272,6 +273,164 @@ final class SimulatorModel: ObservableObject {
         libraryRevision += 1
     }
 
+    // MARK: ユーザー追加(別のディスクイメージ、ROM、プログラム)
+
+    var userLibrary: UserLibrary { UserLibrary(library: library) }
+
+    func reloadUserItems() { userItems = userLibrary.items() }
+
+    func addUserItem(source: URL, name: String, kind: UserItem.Kind, address: UInt16, start: UInt16?, asROM: Bool, ramKB: Int) throws {
+        let item = try userLibrary.add(source: source, name: name, kind: kind, address: address, start: start, asROM: asROM, ramKB: ramKB)
+        reloadUserItems()
+        statusMessage = "「\(item.name)」を追加しました(\(kind.title))"
+    }
+
+    func updateUserItem(_ item: UserItem) throws {
+        try userLibrary.update(item)
+        reloadUserItems()
+        statusMessage = "「\(item.name)」を更新しました"
+    }
+
+    func removeUserItem(_ item: UserItem) {
+        do {
+            try userLibrary.remove(item)
+            discardUserWorkingCopy(item)
+            statusMessage = "「\(item.name)」を削除しました"
+        } catch {
+            statusMessage = "削除に失敗: \(error)"
+        }
+        reloadUserItems()
+    }
+
+    /// ディスクの作業用コピー(書き込みが入るファイル)
+    private func userWorkingCopyURL(_ item: UserItem) throws -> URL {
+        let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            .appendingPathComponent("AltairSim/disks", isDirectory: true)
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        return support.appendingPathComponent("user-\(item.id.uuidString)-\(item.originalName)")
+    }
+
+    private func userWorkingCopy(_ item: UserItem) throws -> URL {
+        let dest = try userWorkingCopyURL(item)
+        if !FileManager.default.fileExists(atPath: dest.path) {
+            try FileManager.default.copyItem(at: userLibrary.fileURL(item), to: dest)
+        }
+        return dest
+    }
+
+    func hasUserWorkingCopy(_ item: UserItem) -> Bool {
+        guard let url = try? userWorkingCopyURL(item) else { return false }
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
+    /// 作業用コピーを捨てる。次の起動では、追加したときのイメージから始まる。
+    func discardUserWorkingCopy(_ item: UserItem) {
+        if let url = try? userWorkingCopyURL(item), FileManager.default.fileExists(atPath: url.path) {
+            try? FileManager.default.removeItem(at: url)
+            libraryRevision += 1
+        }
+    }
+
+    func launchUser(_ item: UserItem) {
+        do {
+            switch item.kind {
+            case .disk8800:
+                guard requireLibrary(LibraryFeature(name: item.name, paths: ["roms/88dskrom.bin"])) else { return }
+                try bootFromDiskURLs([(try userWorkingCopy(item), 0)], label: item.name)
+            case .disk680:
+                boot680DiskImage(try userWorkingCopy(item), title: item.name, linkFLEX: true)
+            case .program8800:
+                try launchProgram8800(item)
+            case .program680:
+                try launchProgram680(item)
+            }
+        } catch {
+            statusMessage = "\(item.name) の起動に失敗: \(error)"
+        }
+        libraryRevision += 1
+    }
+
+    /// 動かしている機種のドライブへ、ユーザー追加のディスクを装着する(起動はしない)
+    func mountUser(_ item: UserItem, drive: Int) {
+        guard item.kind.isDisk else { return }
+        let need: Computer = item.kind == .disk680 ? .altair680b : .altair8800
+        guard computer == need else {
+            statusMessage = "「\(item.name)」は \(need.rawValue) 用です。機種を切り替えてから装着してください"
+            return
+        }
+        do {
+            let disk = try DiskImage(contentsOf: try userWorkingCopy(item), geometry: need == .altair680b ? .ibm3740 : .mitsDCDD)
+            activeDisks.unmount(drive: drive)
+            activeDisks.mount(disk, drive: drive)
+            refreshDrives()
+            statusMessage = "ドライブ \(Character(UnicodeScalar(UInt8(65 + drive)))): 「\(item.name)」を装着しました(書き込みは作業用コピーに入ります)"
+        } catch {
+            statusMessage = "装着に失敗: \(error)"
+        }
+    }
+
+    private func launchProgram8800(_ item: UserItem) throws {
+        let data = try Data(contentsOf: userLibrary.fileURL(item))
+        let records: [(address: UInt16, bytes: [UInt8])]
+        if item.originalName.lowercased().hasSuffix(".hex") {
+            records = try HexLoader.parse(String(decoding: data, as: UTF8.self))
+        } else {
+            records = [(item.address, [UInt8](data))]
+        }
+        guard let first = records.first else { throw UserLibraryError.unreadable("\(item.originalName)(データがありません)") }
+        switchComputerQuietly(.altair8800)
+        machine.stop()
+        machine.reset()
+        machine.removeROMs()
+        machine.setRAMSize(min(max(item.ramKB, 1), 64) * 1024)
+        machine.clearMemory()
+        for r in records {
+            if item.asROM { machine.loadROM(r.bytes, at: r.address) } else { machine.load(r.bytes, at: r.address) }
+        }
+        deleteKey = .backspace
+        clearTerminal()
+        powered = true
+        let start = item.start ?? first.address
+        switches = start
+        machine.examine()
+        machine.start()
+        refresh()
+        statusMessage = "「\(item.name)」を\(item.asROM ? "ROM として" : "")読み込み、\(String(format: "%04X", start)) から実行します"
+    }
+
+    private func launchProgram680(_ item: UserItem) throws {
+        let text = String(decoding: try Data(contentsOf: userLibrary.fileURL(item)), as: UTF8.self).replacingOccurrences(of: "\r\n", with: "\n")
+        let ram = min(max(item.ramKB, 1), 48) * 1024
+        if item.asROM {
+            switchComputerQuietly(.altair680b)
+            machine680.setRunning(false)
+            machine680.removeROMs()
+            machine680.setRAMSize(ram)
+            machine680.uioInstalled = false
+            machine680.clearMemory()
+            _ = try machine680.loadS19(text)
+            noTerminal680 = false
+            deleteKey = .underscore
+            clearTerminal()
+            powered = true
+            machine680.reset()
+            machine680.setRunning(true)
+            refresh()
+            statusMessage = "「\(item.name)」を ROM として取り付け、モニタなしで RESET ベクタから起動しました"
+        } else {
+            guard requireLibrary(.monitor680) else { return }
+            boot680b(withTerminal: true, config: Config680(ramSize: ram))
+            let bytes = try machine680.loadS19(text)
+            if let start = item.start {
+                for u in String(format: "J%04X", start).utf8 { machine680.sendSerial(u) }
+                statusMessage = "「\(item.name)」(\(bytes) バイト)を読み込み、モニタの J \(String(format: "%04X", start)) で実行します"
+            } else {
+                statusMessage = "「\(item.name)」(\(bytes) バイト)を読み込みました。実行はモニタの J コマンドで"
+            }
+            refresh()
+        }
+    }
+
     // MARK: パネル操作
 
     func toggleSwitch(_ bit: Int) { switches ^= (1 << UInt16(bit)) }
@@ -436,33 +595,39 @@ final class SimulatorModel: ObservableObject {
     private func bootFromDisks(_ feature: LibraryFeature, _ files: [(name: String, drive: Int)], label: String) {
         guard requireLibrary(feature) else { return }
         do {
-            let dbl = [UInt8](try library.data("roms/88dskrom.bin"))
-            var paths: [String] = []
-
-            machine.stop()
-            machine.reset()  // 前回の HLT 状態などを解除(RESET)
-            machine.removeROMs()
-            machine.setRAMSize(0x10000)
-            machine.clearMemory()
-            deleteKey = .backspace  // CP/M は ^H で画面上の文字を消す
-            for d in 0..<Self.visibleDrives { machine.disks.unmount(drive: d) }
-            for f in files {
-                let url = try workingCopy(of: f.name, libraryPath: "disks/\(f.name)")
-                machine.disks.mount(try DiskImage(contentsOf: url), drive: f.drive)
-                paths.append(url.path)
-            }
-            machine.disks.reset()
-            machine.loadROM(dbl, at: 0xFF00)
-            clearTerminal()
-            powered = true
-            switches = 0xFF00
-            machine.examine()
-            machine.start()
-            refresh()
-            statusMessage = "\(label) をドライブ A から起動します(ディスクの変更は \(paths.first ?? "") などの作業用コピーに保存されます)"
+            let urls = try files.map { (try workingCopy(of: $0.name, libraryPath: "disks/\($0.name)"), $0.drive) }
+            try bootFromDiskURLs(urls, label: label)
         } catch {
-            statusMessage = "\(label) の起動に失敗: ディスクイメージが見つかりません(\(error))"
+            statusMessage = "\(label) の起動に失敗: \(error)"
         }
+    }
+
+    /// 88-DCDD ブートローダ(FF00h)で、指定のイメージ(作業用コピー)から起動する。
+    private func bootFromDiskURLs(_ files: [(url: URL, drive: Int)], label: String) throws {
+        let dbl = [UInt8](try library.data("roms/88dskrom.bin"))
+        var paths: [String] = []
+
+        switchComputerQuietly(.altair8800)
+        machine.stop()
+        machine.reset()  // 前回の HLT 状態などを解除(RESET)
+        machine.removeROMs()
+        machine.setRAMSize(0x10000)
+        machine.clearMemory()
+        deleteKey = .backspace  // CP/M は ^H で画面上の文字を消す
+        for d in 0..<Self.visibleDrives { machine.disks.unmount(drive: d) }
+        for f in files {
+            machine.disks.mount(try DiskImage(contentsOf: f.url), drive: f.drive)
+            paths.append(f.url.path)
+        }
+        machine.disks.reset()
+        machine.loadROM(dbl, at: 0xFF00)
+        clearTerminal()
+        powered = true
+        switches = 0xFF00
+        machine.examine()
+        machine.start()
+        refresh()
+        statusMessage = "\(label) をドライブ A から起動します(ディスクの変更は \(paths.first ?? "") などの作業用コピーに保存されます)"
     }
 
     func mountDisk(drive: Int) {
@@ -562,6 +727,15 @@ final class SimulatorModel: ObservableObject {
         }
     }
 
+    /// 起動処理はせずに、表示する機種だけ切り替える(selectComputer は切り替え時に既定の OS を起動する)。
+    private func switchComputerQuietly(_ next: Computer) {
+        guard next != computer else { return }
+        machine.stop()
+        machine680.setRunning(false)
+        computer = next
+        cycleDebt = 0
+    }
+
     /// 680b の構成(モニタ、RAM の量、68-UIO ボードの有無、起動 PROM)
     struct Config680 {
         var monitor = "MON680.S19"        // FF00〜。ディスク OS には、SWI を RAM 経由にした SWIMON を使う
@@ -573,6 +747,7 @@ final class SimulatorModel: ObservableObject {
     /// 680b の PROM モニタ(ACIA 版、FF00〜)を載せて、リセットして RUN にする。
     /// withTerminal = false は「端末なし」ストラップで、モニタは 0000 番地へ飛ぶ(フロントパネル運用)。
     func boot680b(withTerminal: Bool, config: Config680 = Config680()) {
+        switchComputerQuietly(.altair680b)
         var needed = ["altair680/monitor/\(config.monitor)"]
         if let prom = config.bootPROM { needed.append("altair680/boot/\(prom)") }
         guard requireLibrary(LibraryFeature(name: "680b モニタ", paths: needed)) else { return }
@@ -616,20 +791,30 @@ final class SimulatorModel: ObservableObject {
         guard requireLibrary(os == .flex3 ? .flex3 : .cpm68) else { return }
         do {
             let url = try workingCopy(of: os.imageName, libraryPath: "altair680/disks/\(os.imageName)")
+            boot680DiskImage(url, title: os.title, linkFLEX: os == .flex3)
+        } catch {
+            statusMessage = "\(os.title) の起動に失敗: \(error)"
+        }
+    }
+
+    /// 680b のディスクイメージ(作業用コピー)から、起動 PROM 経由で起動する。
+    private func boot680DiskImage(_ url: URL, title: String, linkFLEX: Bool) {
+        guard requireLibrary(LibraryFeature(name: title, paths: ["altair680/monitor/SWIMON.S19", "altair680/boot/BOOT.S19"])) else { return }
+        do {
             let image = try DiskImage(contentsOf: url, geometry: .ibm3740)
             // 配布の FLEX 3.0 のイメージは、ブートローダにシステムファイルの位置が書かれていない(LINK.CMD を実行する前の状態)。
             // LINK と同じ処理を、作業用コピーに行う
-            let linked = os == .flex3 && FLEXImage.linkBootLoader(image)
+            let linked = linkFLEX && FLEXImage.linkBootLoader(image)
             boot680b(withTerminal: true, config: Config680(monitor: "SWIMON.S19", ramSize: 0xC000, uio: true, bootPROM: "BOOT.S19"))
             for d in 0..<FD3712Controller.maxDrives { machine680.disks.unmount(drive: d) }
             machine680.disks.mount(image, drive: 0)
             deleteKey = .backspace
             for u in "JFC00".utf8 { machine680.sendSerial(u) }
             refresh()
-            statusMessage = "\(os.title) を起動します(モニタの J FC00 で起動 PROM へ。RAM 48KB、ドライブ A: \(url.lastPathComponent)。変更は作業用コピーに保存されます)"
+            statusMessage = "\(title) を起動します(モニタの J FC00 で起動 PROM へ。RAM 48KB、ドライブ A: \(url.lastPathComponent)。変更は作業用コピーに保存されます)"
                 + (linked ? "。ブートローダに FLEX3.SYS の位置を書き込みました(LINK と同じ処理)" : "")
         } catch {
-            statusMessage = "\(os.title) の起動に失敗: \(error)"
+            statusMessage = "\(title) の起動に失敗: \(error)"
         }
     }
 

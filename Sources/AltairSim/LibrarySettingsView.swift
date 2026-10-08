@@ -8,6 +8,7 @@ struct LibrarySettingsView: View {
     @ObservedObject var model: SimulatorModel
     @State private var message = ""
     @State private var dropping = false
+    @State private var editor: UserItemEditor.Mode?
 
     private var groups: [(name: String, assets: [LibraryAsset])] {
         var order: [String] = []
@@ -33,6 +34,8 @@ struct LibrarySettingsView: View {
             HStack {
                 Button("ファイル・フォルダを取り込み…", action: importMany)
                     .help("複数のファイルや、ファイルの入ったフォルダを選びます。ファイル名で項目を判別します")
+                Button("ユーザー追加…", action: addUser)
+                    .help("一覧にない ROM・プログラム・ディスクイメージを、名前をつけて追加します")
                 Button("Finder で開く") { openInFinder() }
                 Spacer()
                 Text("\(presentCount) / \(AssetLibrary.catalog.count) 件")
@@ -40,6 +43,13 @@ struct LibrarySettingsView: View {
             }
 
             List {
+                Section("ユーザー追加") {
+                    if model.userItems.isEmpty {
+                        Text("まだありません。「ユーザー追加…」から、手持ちの ROM・プログラム・ディスクイメージを追加できます。")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    ForEach(model.userItems) { item in userRow(item) }
+                }
                 ForEach(groups, id: \.name) { group in
                     Section(group.name) {
                         ForEach(group.assets) { asset in row(asset) }
@@ -59,7 +69,56 @@ struct LibrarySettingsView: View {
                 .frame(maxWidth: .infinity, minHeight: 28, alignment: .topLeading)
         }
         .padding(16)
-        .frame(width: 720, height: 640)
+        .frame(width: 720, height: 700)
+        .onAppear { model.reloadUserItems() }
+        .sheet(item: $editor) { mode in
+            UserItemEditor(model: model, mode: mode) { result in
+                editor = nil
+                if let result { message = result }
+            }
+        }
+    }
+
+    private func userRow(_ item: UserItem) -> some View {
+        _ = model.libraryRevision
+        let size = (try? FileManager.default.attributesOfItem(atPath: model.userLibrary.fileURL(item).path)[.size] as? Int) ?? nil
+        var detail = "\(item.kind.title)  ·  \(item.originalName)"
+        if let size { detail += "  ·  \(size.formatted()) バイト" }
+        return HStack(spacing: 8) {
+            Image(systemName: item.kind.isDisk ? "opticaldiscdrive" : "memorychip")
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.name)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button(item.kind.isDisk ? "起動" : "実行") { model.launchUser(item) }
+                .controlSize(.small)
+            if item.kind.isDisk {
+                Menu("装着") {
+                    ForEach(0..<SimulatorModel.visibleDrives, id: \.self) { d in
+                        Button("ドライブ \(String(UnicodeScalar(UInt8(65 + d))))") { model.mountUser(item, drive: d) }
+                    }
+                }
+                .controlSize(.small).fixedSize()
+                if model.hasUserWorkingCopy(item) {
+                    Button("作業コピーを破棄") { model.discardUserWorkingCopy(item) }
+                        .controlSize(.small)
+                        .help("書き込みを捨てて、追加したときのイメージに戻します")
+                }
+            }
+            Button("編集…") { editor = .edit(item) }.controlSize(.small)
+            Button("削除") { model.removeUserItem(item) }.controlSize(.small)
+        }
+    }
+
+    private func addUser() {
+        let panel = NSOpenPanel()
+        panel.message = "追加するファイル(.dsk / .hex / .bin / .s19 など)を選択"
+        panel.allowedContentTypes = [.data]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        editor = .add(url)
     }
 
     private func row(_ asset: LibraryAsset) -> some View {

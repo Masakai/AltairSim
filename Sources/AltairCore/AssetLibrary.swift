@@ -51,7 +51,7 @@ public struct LibraryImportReport {
         var parts: [String] = []
         if !imported.isEmpty { parts.append("\(imported.count) 件を取り込みました") }
         if !sizeWarnings.isEmpty { parts.append("サイズが想定と違う: " + sizeWarnings.joined(separator: "、")) }
-        if !unrecognized.isEmpty { parts.append("対象外(名前が一覧にない): " + unrecognized.joined(separator: "、")) }
+        if !unrecognized.isEmpty { parts.append("対象外(名前が一覧にない。「ユーザー追加…」で登録できます): " + unrecognized.joined(separator: "、")) }
         if !failed.isEmpty { parts.append("失敗: " + failed.joined(separator: "、")) }
         return parts.isEmpty ? "取り込むファイルがありませんでした" : parts.joined(separator: "。")
     }
