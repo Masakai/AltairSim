@@ -283,6 +283,11 @@ public final class CPU6800 {
     private func inherentOrBranch(_ op: UInt8) -> Int {
         if op >= 0x20 && op <= 0x2F {
             let offset = Int8(bitPattern: fetch())
+            if op == 0x21 {  // BRN は 6801 の命令。6800 では未定義(実機では分岐しない 2 バイト命令として動く)
+                illegalCount += 1
+                lastIllegal = op
+                return 4
+            }
             if condition(op & 0x0F) {
                 pc = pc &+ UInt16(bitPattern: Int16(offset))
             }
@@ -396,6 +401,8 @@ public final class CPU6800 {
             _ = sub(reg(), bus.read(address()), carry: false); return accCycles[mode]
         case 0x2:  // SBC
             setReg(sub(reg(), bus.read(address()), carry: c)); return accCycles[mode]
+        case 0x3:  // 6800 にはない(6801 の SUBD / ADDD など)
+            return illegal(op)
         case 0x4:  // AND
             let r = reg() & bus.read(address()); setReg(r); setNZ(r); v = false; return accCycles[mode]
         case 0x5:  // BIT
