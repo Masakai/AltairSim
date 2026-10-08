@@ -2,9 +2,7 @@ import XCTest
 @testable import AltairCore
 
 final class CPMTests: XCTestCase {
-    private let base = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("Sources/AltairSim/Resources")
+    private let base = AssetLibrary.defaultRoot
 
     func testBootsCPM22FromDiskBootloader() throws {
         let diskURL = base.appendingPathComponent("disks/cpm22b23-56k.dsk")
@@ -53,9 +51,7 @@ final class CPMTests: XCTestCase {
 }
 
 final class CPMMultiDriveTests: XCTestCase {
-    private let base = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("Sources/AltairSim/Resources")
+    private let base = AssetLibrary.defaultRoot
 
     func testDrivesCAndDAreIndependent() throws {
         let diskURL = base.appendingPathComponent("disks/cpm22b23-56k.dsk")

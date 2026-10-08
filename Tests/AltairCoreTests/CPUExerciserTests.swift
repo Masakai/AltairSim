@@ -2,11 +2,9 @@ import XCTest
 @testable import AltairCore
 
 /// CP/M 用の 8080 テストプログラム(.COM)を、BDOS 呼び出し(0005h)だけを模擬して実行する。
-/// 取得元は Sources/AltairSim/Resources/cpu_tests/SOURCES.md を参照。
+/// 取得元は AssetLibrary.catalog を参照(ライブラリに取り込んだファイルを使う)。
 final class CPUExerciserTests: XCTestCase {
-    private let dir = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("Sources/AltairSim/Resources/cpu_tests")
+    private let dir = AssetLibrary.defaultRoot.appendingPathComponent("cpu_tests")
 
     private struct Result {
         var output: String

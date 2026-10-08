@@ -20,18 +20,31 @@ swift test            # CPU・パネル・ローダーのテスト
 - 手入力: アドレススイッチを設定して EXAMINE、データを設定して DEPOSIT NEXT を繰り返す
 - BASIC 等は手元のイメージ(`.bin` は 0000 に配置、`.hex` はレコードのアドレスに配置)を「ファイルを読み込む」で読み込み、RESET → RUN
 
-## ROM
+## ROM・ディスクイメージの取り込み
 
-`Sources/AltairSim/Resources/roms` に配布元から取得した ROM を置いています。
+ROM、ディスクイメージ、8080 テストプログラムは、配布元のライセンスの都合で**このリポジトリにもアプリにも含めていません**。使うには、ご自身で配布元の条件を確認して取得し、アプリに取り込みます。
+
+1. メニュー「AltairSim ▸ 設定…」(⌘,)を開きます
+2. 一覧の各項目の「取得元」リンクからファイルを入手します(一覧には項目ごとの想定サイズも出ます)
+3. 「ファイル・フォルダを取り込み…」で複数のファイルやフォルダをまとめて選ぶか、一覧へドラッグします。ファイル名で項目を判別します。名前が違うファイルは、項目の「取り込み…」で指定して取り込めます
+4. 取り込み済みの項目は緑のチェックになります
+
+取り込んだファイルは `~/Library/Application Support/AltairSim/library/` にコピーされます(環境変数 `ALTAIR_LIBRARY` で場所を変えられます。テスト用です)。ファイルがない機能のボタンを押すと、足りないファイル名を状態欄に出して設定画面を開きます。サイズが想定と違うファイルも取り込みますが、警告を出します。詳しい一覧と取得元は [docs/library.md](docs/library.md) にあります。
+
+ディスクイメージは、起動のたびに `~/Library/Application Support/AltairSim/disks/` へ作業用コピーを作り、書き込みはそのコピーに入ります。ライブラリのファイルは変わりません。
+
+テストは、ライブラリのファイルがなければ該当のものだけ自動でスキップします(`swift test`)。
+
+## ROM
 
 | ファイル | 取得元 |
 |---|---|
 | `8kBas_e0/e8/f0/f8.bin`(Altair BASIC 8K、E000h〜) | altairclone.com/downloads/roms/8K BASIC/ |
-| `88dskrom.bin` `altmon.bin` `turnmon.bin` | github.com/tommojphillips/Altair8800/tree/master/roms |
+| `88dskrom.bin` | github.com/tommojphillips/Altair8800/tree/master/roms |
 
-「Altair BASIC 8K ROM で起動」で E000h に取り付けて実行します(RAM 32KB)。
+「BASIC 8K」ボタンで E000h に取り付けて実行します(RAM 32KB)。
 BASIC ROM はシリアルをポート 00h/01h(2SIO 形式)で使うため、シミュレータは 00h/01h と 10h/11h の両方を同じ端末に接続しています。
-`88dskrom.bin`(ディスクブート)は 88-DCDD 未実装のため使えません。`altmon.bin` `turnmon.bin` は未検証です。
+`88dskrom.bin` はディスクブート(FF00h)用で、CP/M と Zork の起動に使います。
 
 ## 速度オプション
 
@@ -45,9 +58,9 @@ BASIC ROM はシリアルをポート 00h/01h(2SIO 形式)で使うため、シ�
 
 - 88-DCDD フロッピーディスクコントローラ(ポート 08h-0Ah、ドライブ A〜P)を実装しています。回転待ちは時間ではなく「セクタレジスタを読むたびに 1 セクタ進む」簡易モデルです
 - ディスクイメージは 77 トラック × 32 セクタ × 137 バイト(337,568 バイト)以上の .dsk です。配布されている .dsk は末尾に余白があります(CP/M 2.2 は 337,664 バイト)
-- 「CP/M 2.2 で起動」: 同梱の `Resources/disks/cpm22b23-56k.dsk`(altairclone.com から取得)を `~/Library/Application Support/AltairSim/disks/` に作業用コピーとして置き、ドライブ A に装着し、88dskrom(FF00h)から起動します。RAM は 64KB。ディスクへの書き込みは作業用コピーに反映され、元のファイルは変わりません
+- 「CP/M 2.2 で起動」: ライブラリの `disks/cpm22b23-56k.dsk`(altairclone.com で入手)を `~/Library/Application Support/AltairSim/disks/` に作業用コピーとして置き、ドライブ A に装着し、88dskrom(FF00h)から起動します。RAM は 64KB。ディスクへの書き込みは作業用コピーに反映され、元のファイルは変わりません
 - 「ディスク」メニューから、ドライブ A〜D に任意の .dsk を装着・取り外しできます。この場合は選んだファイルに直接書き込まれます
-- 「CP/M 3 で起動」: 同梱の `cpm3_v1.0_56K_disk1.dsk` をドライブ A、`cpm3_v1.0_56k_disk2.dsk` をドライブ B に装着して起動します。作業用コピーの扱いは CP/M 2.2 と同じです
+- 「CP/M 3 で起動」: ライブラリの `cpm3_v1.0_56K_disk1.dsk` をドライブ A、`cpm3_v1.0_56k_disk2.dsk` をドライブ B に装着して起動します。作業用コピーの扱いは CP/M 2.2 と同じです
 - 動作確認: CP/M 2.2b の起動、`DIR`、`PIP` によるファイルコピー(ディスク書き込み)、`MBASIC`(BASIC-80)の `PRINT 2+3`
 
 ## ディスクドライブ画面
@@ -58,11 +71,11 @@ CP/M 3 の動作確認: `CP/M V3.0 Loader` から `CP/M 3 BIOS v1.0 for Altair 8
 
 ## Zork
 
-「Zork」ボタンで Burcon 56K CP/M 2.2 のディスク(`zork.dsk`)をドライブ A から起動します。`A>` で `ZORK1` または `ZORK2` と入力します。同梱のディスクには `ZORK3.COM` はありますがデータファイルがなく、`Load Game Disk` の表示で止まります。
+「Zork」ボタンで Burcon 56K CP/M 2.2 のディスク(`zork.dsk`)をドライブ A から起動します。`A>` で `ZORK1` または `ZORK2` と入力します。このディスクには `ZORK3.COM` はありますがデータファイルがなく、`Load Game Disk` の表示で止まります。
 
 ## 8080 命令テスト
 
-`Tests/Resources/cpu_tests/` の CP/M 用テストプログラムを、BDOS 呼び出し(0005h)だけを模擬するハーネスで実行します(`CPUExerciserTests`)。
+ライブラリの `cpu_tests/` に取り込んだ CP/M 用テストプログラムを、BDOS 呼び出し(0005h)だけを模擬するハーネスで実行します(`CPUExerciserTests`)。
 
 | テスト | 結果 |
 |---|---|

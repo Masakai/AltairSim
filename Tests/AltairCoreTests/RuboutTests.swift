@@ -3,8 +3,8 @@ import XCTest
 
 final class RuboutTests: XCTestCase {
     func testBasicRuboutCodes() throws {
-        let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("Sources/AltairSim/Resources/roms")
+        let dir = AssetLibrary.defaultRoot.appendingPathComponent("roms")
+        guard AssetLibrary.shared.isAvailable(.basic8K) else { throw XCTSkip("BASIC 8K ROM がライブラリにありません") }
         for code: UInt8 in [0x08, 0x7F, 0x5F] {
             let m = AltairMachine(ramSize: 0x8000)
             var addr: UInt16 = 0xE000

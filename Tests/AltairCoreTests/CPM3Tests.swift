@@ -2,9 +2,7 @@ import XCTest
 @testable import AltairCore
 
 final class CPM3Tests: XCTestCase {
-    private let base = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("Sources/AltairSim/Resources")
+    private let base = AssetLibrary.defaultRoot
 
     func testBootsCPM3() throws {
         let d1 = base.appendingPathComponent("disks/cpm3_v1.0_56K_disk1.dsk")

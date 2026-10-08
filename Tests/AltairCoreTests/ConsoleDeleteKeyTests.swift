@@ -2,9 +2,7 @@ import XCTest
 @testable import AltairCore
 
 final class ConsoleDeleteKeyTests: XCTestCase {
-    private let base = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("Sources/AltairSim/Resources")
+    private let base = AssetLibrary.defaultRoot
 
     private func bootCPM(_ names: [String]) throws -> (AltairMachine, () -> String, (String) -> Void) {
         let m = AltairMachine(ramSize: 0x10000)

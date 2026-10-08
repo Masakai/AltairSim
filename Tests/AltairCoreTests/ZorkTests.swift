@@ -2,9 +2,7 @@ import XCTest
 @testable import AltairCore
 
 final class ZorkTests: XCTestCase {
-    private let base = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("Sources/AltairSim/Resources")
+    private let base = AssetLibrary.defaultRoot
 
     func testBootsZorkDisk() throws {
         let disk = base.appendingPathComponent("disks/zork.dsk")

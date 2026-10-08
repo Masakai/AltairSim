@@ -5,7 +5,7 @@ import XCTest
 /// (メモリを消さないと BASIC は何も出力せずに止まる。電源投入直後のメモリは 0 の前提で作られているため)
 final class BootAfterOtherProgramTests: XCTestCase {
     func testBasicBootsAfterZork() throws {
-        let base = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Sources/AltairSim/Resources")
+        let base = AssetLibrary.defaultRoot
         let disk = base.appendingPathComponent("disks/zork.dsk")
         guard FileManager.default.fileExists(atPath: disk.path) else { throw XCTSkip("zork.dsk がありません") }
         let m = AltairMachine(ramSize: 0x10000)

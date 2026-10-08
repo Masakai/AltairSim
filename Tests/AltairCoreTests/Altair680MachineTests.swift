@@ -2,9 +2,7 @@ import XCTest
 @testable import AltairCore
 
 final class Altair680MachineTests: XCTestCase {
-    private let base = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("Sources/AltairSim/Resources/altair680")
+    private let base = AssetLibrary.defaultRoot.appendingPathComponent("altair680")
 
     private func machine(ram: Int = 0x2000) throws -> (Altair680Machine, () -> String) {
         let m = Altair680Machine(ramSize: ram)

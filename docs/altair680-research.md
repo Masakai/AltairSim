@@ -23,7 +23,7 @@ Altair 680(Motorola 6800 搭載)をシミュレータに加えるための調査
   - プロンプトは「.」。コマンド: M(メモリ表示と書き込み)、N(次番地)、J(実行)、L(S レコードの読み込み)、P(ブレークポイントから再開)ほか
 - BASIC は S レコード(S19)で、モニタの L コマンドから読み込む。起動は `J 0000`(joewing.net の記述)
 
-## 入手先(2026-10-08 に取得済み。配置は `Sources/AltairSim/Resources/altair680/`)
+## 入手先(2026-10-08 に取得済み。ライブラリの `altair680/` に配置。取り込み方は docs/library.md)
 
 - https://deramp.com/downloads/altair/software/altair_680/PROM%20Monitor/
   - `MON680.S19`(632 バイト)、`MON680.ASM`、`MON680.LST`、`SWIMON.S19`、`SWIMON.ASM`、`SWIMON.LST`、`680b Monitor.pdf`

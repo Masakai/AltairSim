@@ -4,9 +4,7 @@ import XCTest
 /// 680b の PROM モニタ(ACIA 版)と Altair BASIC を、6800 の CPU で動かす。
 /// 実際のプログラムが動くことで、命令の実装全体を確かめる。
 final class Monitor680Tests: XCTestCase {
-    private let base = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("Sources/AltairSim/Resources/altair680")
+    private let base = AssetLibrary.defaultRoot.appendingPathComponent("altair680")
 
     private var bus: TestBus6800!
     private var cpu: CPU6800!

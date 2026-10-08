@@ -33,6 +33,9 @@ final class SimulatorModel: ObservableObject {
     }
     @Published var deleteKey: DeleteKey = .backspace
     @Published var statusMessage = ""
+    /// ライブラリ(利用者が取り込んだ ROM・ディスクイメージ)の変更通知用。取り込み・削除のたびに増やす
+    @Published var libraryRevision = 0
+    var library: AssetLibrary { AssetLibrary.shared }
     /// 端末のキーボード飾りで光らせているキー(ラベル)
     /// ディスクドライブ A・B の表示用状態
     struct DriveInfo: Equatable {
@@ -243,6 +246,32 @@ final class SimulatorModel: ObservableObject {
             + (wasRunning ? "。実行を止めました(RUN で再開)" : "")
     }
 
+    // MARK: ライブラリ(利用者が取り込む ROM・ディスクイメージ)
+
+    /// 機能に必要なファイルがそろっているか確認する。足りなければ案内を出して設定画面を開く。
+    private func requireLibrary(_ feature: LibraryFeature) -> Bool {
+        guard library.isAvailable(feature) else {
+            statusMessage = library.missingMessage(feature)
+            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            return false
+        }
+        return true
+    }
+
+    /// 設定画面から呼ぶ。ファイルやフォルダを取り込み、結果を状態欄にも出す。
+    @discardableResult
+    func importLibraryItems(_ urls: [URL]) -> LibraryImportReport {
+        let report = library.importItems(urls)
+        libraryRevision += 1
+        statusMessage = "ライブラリ: " + report.summary
+        return report
+    }
+
+    func removeLibraryAsset(_ asset: LibraryAsset) {
+        do { try library.remove(asset) } catch { statusMessage = "削除に失敗: \(error)" }
+        libraryRevision += 1
+    }
+
     // MARK: パネル操作
 
     func toggleSwitch(_ bit: Int) { switches ^= (1 << UInt16(bit)) }
@@ -327,8 +356,8 @@ final class SimulatorModel: ObservableObject {
 
     /// Altair BASIC 8K ROM(E000-FFFF)を取り付け、アドレススイッチ E000 → EXAMINE → RUN の操作を行う。
     func bootBasicROM() {
+        guard requireLibrary(.basic8K) else { return }
         let names = ["8kBas_e0.bin", "8kBas_e8.bin", "8kBas_f0.bin", "8kBas_f8.bin"]
-        guard let dir = Bundle.module.resourceURL?.appendingPathComponent("roms") else { return }
         do {
             machine.stop()
             machine.reset()  // 前回の HLT 状態などを解除(RESET)
@@ -338,7 +367,7 @@ final class SimulatorModel: ObservableObject {
             deleteKey = .underscore  // Altair BASIC は 08h を削除として扱わない
             var address: UInt16 = 0xE000
             for name in names {
-                let bytes = [UInt8](try Data(contentsOf: dir.appendingPathComponent(name)))
+                let bytes = [UInt8](try library.data("roms/\(name)"))
                 machine.loadROM(bytes, at: address)
                 address &+= UInt16(bytes.count)
             }
@@ -356,18 +385,16 @@ final class SimulatorModel: ObservableObject {
 
     // MARK: ディスクと CP/M
 
-    /// アプリ同梱のイメージを書き込み可能な作業用コピーとして Application Support に置く
-    private func workingCopy(of name: String, resourceDir: String = "disks") throws -> URL {
+    /// ライブラリのイメージを、書き込み可能な作業用コピーとして Application Support に置く
+    private func workingCopy(of name: String, libraryPath: String) throws -> URL {
         let fm = FileManager.default
         let support = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             .appendingPathComponent("AltairSim/disks", isDirectory: true)
         try fm.createDirectory(at: support, withIntermediateDirectories: true)
         let dest = support.appendingPathComponent(name)
         if !fm.fileExists(atPath: dest.path) {
-            guard let src = Bundle.module.resourceURL?.appendingPathComponent("\(resourceDir)/\(name)"),
-                  fm.fileExists(atPath: src.path) else {
-                throw CocoaError(.fileNoSuchFile)
-            }
+            let src = library.url(libraryPath)
+            guard fm.fileExists(atPath: src.path) else { throw CocoaError(.fileNoSuchFile) }
             try fm.copyItem(at: src, to: dest)
         }
         return dest
@@ -375,24 +402,24 @@ final class SimulatorModel: ObservableObject {
 
     /// 88-DCDD ブートローダ ROM(FF00h)でドライブ A から CP/M 2.2 を起動する。
     func bootCPM() {
-        bootFromDisks([("cpm22b23-56k.dsk", 0)], label: "CP/M 2.2")
+        bootFromDisks(.cpm22, [("cpm22b23-56k.dsk", 0)], label: "CP/M 2.2")
     }
 
     /// CP/M 3(ドライブ A = システムディスク、B = ユーティリティディスク)を起動する。
     func bootCPM3() {
-        bootFromDisks([("cpm3_v1.0_56K_disk1.dsk", 0), ("cpm3_v1.0_56k_disk2.dsk", 1)], label: "CP/M 3")
+        bootFromDisks(.cpm3, [("cpm3_v1.0_56K_disk1.dsk", 0), ("cpm3_v1.0_56k_disk2.dsk", 1)], label: "CP/M 3")
     }
 
     /// Zork(Burcon 56K CP/M 2.2 のブータブルディスク)をドライブ A から起動する。
     func bootZork() {
-        bootFromDisks([("zork.dsk", 0)], label: "Zork ディスク")
+        bootFromDisks(.zork, [("zork.dsk", 0)], label: "Zork ディスク")
     }
 
     /// 8080 命令テスト(.COM)を、BDOS 互換のシムを載せたこのマシン上で実行し、結果を端末に出す。
     func runCPUTest(_ file: String, title: String, fast: Bool) {
+        guard requireLibrary(.cpuTest(file)) else { return }
         do {
-            guard let dir = Bundle.module.resourceURL?.appendingPathComponent("cpu_tests") else { return }
-            let com = [UInt8](try Data(contentsOf: dir.appendingPathComponent(file)))
+            let com = [UInt8](try library.data("cpu_tests/\(file)"))
             machine.stop()
             CPMConsoleShim.load(com: com, into: machine)
             clearTerminal()
@@ -406,10 +433,10 @@ final class SimulatorModel: ObservableObject {
         }
     }
 
-    private func bootFromDisks(_ files: [(name: String, drive: Int)], label: String) {
+    private func bootFromDisks(_ feature: LibraryFeature, _ files: [(name: String, drive: Int)], label: String) {
+        guard requireLibrary(feature) else { return }
         do {
-            guard let dir = Bundle.module.resourceURL?.appendingPathComponent("roms") else { return }
-            let dbl = [UInt8](try Data(contentsOf: dir.appendingPathComponent("88dskrom.bin")))
+            let dbl = [UInt8](try library.data("roms/88dskrom.bin"))
             var paths: [String] = []
 
             machine.stop()
@@ -420,7 +447,7 @@ final class SimulatorModel: ObservableObject {
             deleteKey = .backspace  // CP/M は ^H で画面上の文字を消す
             for d in 0..<Self.visibleDrives { machine.disks.unmount(drive: d) }
             for f in files {
-                let url = try workingCopy(of: f.name)
+                let url = try workingCopy(of: f.name, libraryPath: "disks/\(f.name)")
                 machine.disks.mount(try DiskImage(contentsOf: url), drive: f.drive)
                 paths.append(url.path)
             }
@@ -546,16 +573,18 @@ final class SimulatorModel: ObservableObject {
     /// 680b の PROM モニタ(ACIA 版、FF00〜)を載せて、リセットして RUN にする。
     /// withTerminal = false は「端末なし」ストラップで、モニタは 0000 番地へ飛ぶ(フロントパネル運用)。
     func boot680b(withTerminal: Bool, config: Config680 = Config680()) {
-        guard let dir = Bundle.module.resourceURL?.appendingPathComponent("altair680") else { return }
+        var needed = ["altair680/monitor/\(config.monitor)"]
+        if let prom = config.bootPROM { needed.append("altair680/boot/\(prom)") }
+        guard requireLibrary(LibraryFeature(name: "680b モニタ", paths: needed)) else { return }
         do {
             machine680.setRunning(false)
             machine680.removeROMs()
             machine680.setRAMSize(config.ramSize)
             machine680.uioInstalled = config.uio
-            let monitor = try String(contentsOf: dir.appendingPathComponent("monitor/\(config.monitor)"), encoding: .utf8)
+            let monitor = String(decoding: try library.data("altair680/monitor/\(config.monitor)"), as: UTF8.self)
             try machine680.loadS19(monitor)
             if let prom = config.bootPROM {
-                let text = try String(contentsOf: dir.appendingPathComponent("boot/\(prom)"), encoding: .utf8)
+                let text = String(decoding: try library.data("altair680/boot/\(prom)"), as: UTF8.self)
                 try machine680.loadS19(text)
             }
             machine680.clearMemory()
@@ -584,16 +613,9 @@ final class SimulatorModel: ObservableObject {
     /// ディスク OS を起動する。実機の手順と同じく、SWIMON と起動 PROM(FC00)を載せ、68-UIO を差し、
     /// ドライブ 0 にディスクを入れて、モニタの J FC00 で起動 PROM へ飛ぶ。
     func boot680Disk(_ os: DiskOS) {
-        guard let base = Bundle.module.resourceURL?.appendingPathComponent("altair680") else { return }
-        let missing = ["boot/BOOT.S19", "disks/\(os.imageName)", "monitor/SWIMON.S19"].filter {
-            !FileManager.default.fileExists(atPath: base.appendingPathComponent($0).path)
-        }
-        guard missing.isEmpty else {
-            statusMessage = "\(os.title) の起動に必要なファイルがありません: \(missing.joined(separator: "、"))(Resources/altair680/ に置く。取得元は Resources/README.md)"
-            return
-        }
+        guard requireLibrary(os == .flex3 ? .flex3 : .cpm68) else { return }
         do {
-            let url = try workingCopy(of: os.imageName, resourceDir: "altair680/disks")
+            let url = try workingCopy(of: os.imageName, libraryPath: "altair680/disks/\(os.imageName)")
             let image = try DiskImage(contentsOf: url, geometry: .ibm3740)
             // 配布の FLEX 3.0 のイメージは、ブートローダにシステムファイルの位置が書かれていない(LINK.CMD を実行する前の状態)。
             // LINK と同じ処理を、作業用コピーに行う
@@ -614,10 +636,9 @@ final class SimulatorModel: ObservableObject {
     /// 紙テープ版の BASIC(S レコード)を、モニタの L コマンドで読み込んで起動する。
     /// 読み込みはシリアルから流し込むので、速度設定に応じて数秒かかる。
     func load680BASIC() {
-        guard let dir = Bundle.module.resourceURL?.appendingPathComponent("altair680") else { return }
+        guard requireLibrary(.basic680) else { return }
         do {
-            let url = dir.appendingPathComponent("basic/paper-basic-v1.1-r3.2.s19")
-            let tape = try String(contentsOf: url, encoding: .utf8).replacingOccurrences(of: "\r\n", with: "\n")
+            let tape = String(decoding: try library.data("altair680/basic/paper-basic-v1.1-r3.2.s19"), as: UTF8.self).replacingOccurrences(of: "\r\n", with: "\n")
             boot680b(withTerminal: true)
             for u in ("L" + tape + "J0000").utf8 { machine680.sendSerial(u) }
             statusMessage = "BASIC をモニタの L コマンドで読み込んで起動します(MEMORY SIZE? は Return、TERMINAL WIDTH? は Return、WANT SIN-COS-TAN-ATN? は N)"

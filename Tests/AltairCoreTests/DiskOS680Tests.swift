@@ -3,9 +3,7 @@ import XCTest
 
 /// 680b に FD3712 と 68-UIO を付けて、本物の起動 PROM(BOOT.S19)と FLEX 3.0 / CP/68 のディスクイメージを動かす。
 final class DiskOS680Tests: XCTestCase {
-    private let base = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("Sources/AltairSim/Resources/altair680")
+    private let base = AssetLibrary.defaultRoot.appendingPathComponent("altair680")
 
     private func boot(image name: String, bytes override: [UInt8]? = nil, speed: Int = 500_000) throws -> (Altair680Machine, DiskImage, () -> String) {
         let files = ["monitor/SWIMON.S19", "boot/BOOT.S19", "disks/\(name)"]

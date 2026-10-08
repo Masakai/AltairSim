@@ -2,9 +2,7 @@ import XCTest
 @testable import AltairCore
 
 final class ROMTests: XCTestCase {
-    private let romDir = URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        .appendingPathComponent("Sources/AltairSim/Resources/roms")
+    private let romDir = AssetLibrary.defaultRoot.appendingPathComponent("roms")
 
     private func rom(_ name: String) throws -> [UInt8] {
         let url = romDir.appendingPathComponent(name)
