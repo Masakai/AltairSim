@@ -19,3 +19,6 @@ SWIMON.*
 BOOT.*
 paper-basic-*.s19
 cassette-basic-*.s19
+
+# アプリのビルド成果物(Tools/make_app.sh)
+build/

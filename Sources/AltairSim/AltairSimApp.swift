@@ -16,7 +16,7 @@ struct AltairSimApp: App {
             ContentView(model: model)
                 .frame(minWidth: 820, minHeight: 640)
         }
-        .defaultSize(width: 1560, height: 760)
+        .defaultSize(width: 1600, height: 1130)
         Settings {
             LibrarySettingsView(model: model)
         }

@@ -9,6 +9,18 @@ swift run AltairSim   # アプリ起動
 swift test            # CPU・パネル・ローダーのテスト
 ```
 
+### アプリ(.app)として使う
+
+```bash
+Tools/make_app.sh              # build/AltairSim.app を作る(いまのマシンの向きだけ)
+Tools/make_app.sh --universal  # Apple シリコンと Intel の両方に対応
+Tools/make_app.sh --install    # 作成後に ~/Applications へコピーする
+```
+
+`build/AltairSim.app` ができます(Dock のアイコンは `Tools/make_icon.py` で描いています)。署名はアドホック(自分のマシンで使う前提)で、公証はしていません。他のマシンへ配る場合は、Developer ID での署名と公証が別途必要です。Bundle ID は環境変数 `BUNDLE_ID`(既定 `local.altairsim`)、バージョンは `VERSION`(既定 1.0)で変えられます。
+
+ROM・ディスクイメージはアプリに含まれていないので、初回は設定(⌘,)から取り込みます(下の「ROM・ディスクイメージの取り込み」)。取り込んだファイルは `~/Library/Application Support/AltairSim/library/` にあり、`swift run` で起動した場合と共通です。
+
 ## 構成
 
 - `Sources/AltairCore`: 8080 CPU(全命令、クロック数つき)、64KB メモリ、2SIO 相当のシリアル(ポート 10h/11h)、センススイッチ(ポート FFh)、Intel HEX ローダー
