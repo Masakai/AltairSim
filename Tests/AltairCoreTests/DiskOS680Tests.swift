@@ -76,4 +76,31 @@ final class DiskOS680Tests: XCTestCase {
         XCTAssertTrue(text().contains(" 5 "), text())
         XCTAssertTrue(text().contains(" 1  4  9  16  25 "), text())
     }
+
+    /// BASIC のプログラムをディスクへ SAVE し、NEW で消して、LOAD で読み戻して実行する
+    func testFLEXBasicSaveAndLoad() throws {
+        let (m, image, text) = try boot(image: "flex3-680.dsk")
+        XCTAssertTrue(FLEXImage.linkBootLoader(image))
+        func send(_ s: String, cycles: Int = 6_000_000) { for u in s.utf8 { m.sendSerial(u) }; m.run(cycles: cycles) }
+        m.run(cycles: 20_000_000)
+        send("10,08,26\r", cycles: 3_000_000)
+        send("BASIC\r", cycles: 30_000_000)
+        send("10 FOR I=1 TO 5:PRINT I*I;:NEXT I\r")
+        XCTAssertNil(FLEXImage.findFile(image, name: "SQUARES", ext: "BAS"), "SAVE 前はファイルがない")
+        send("SAVE \"SQUARES\"\r", cycles: 20_000_000)
+        XCTAssertNotNil(FLEXImage.findFile(image, name: "SQUARES", ext: "BAS"), "SAVE したファイルがディレクトリに載る")
+        XCTAssertTrue(image.dirty, "ディスクのイメージが書き換わった")
+
+        send("NEW\r")
+        let mark = text().count
+        send("LIST\r")
+        XCTAssertFalse(String(text().dropFirst(mark)).contains("FOR I"), "NEW でプログラムが消えた")
+        send("LOAD \"SQUARES\"\r", cycles: 20_000_000)
+        let mark2 = text().count
+        send("LIST\r")
+        XCTAssertTrue(String(text().dropFirst(mark2)).contains("10 FOR I=1 TO 5:PRINT I*I;:NEXT I"), "LOAD で読み戻せた")
+        let mark3 = text().count
+        send("RUN\r", cycles: 10_000_000)
+        XCTAssertTrue(String(text().dropFirst(mark3)).contains(" 1  4  9  16  25 "))
+    }
 }

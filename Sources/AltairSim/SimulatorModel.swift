@@ -45,6 +45,7 @@ final class SimulatorModel: ObservableObject {
     @Published var drives = [DriveInfo](repeating: DriveInfo(), count: SimulatorModel.visibleDrives)
     private var driveBusyUntil = [TimeInterval](repeating: 0, count: SimulatorModel.visibleDrives)
     private var lastDiskActivity = 0
+    private var lastDiskActivityTime: TimeInterval = 0
 
     @Published var litKeys: Set<String> = []
     private var litGeneration: [String: Int] = [:]
@@ -154,9 +155,15 @@ final class SimulatorModel: ObservableObject {
         let counter = disks.activityCounter
         if counter != lastDiskActivity {
             lastDiskActivity = counter
+            lastDiskActivityTime = now
             if let d = disks.lastActiveDrive, d < driveBusyUntil.count {
                 driveBusyUntil[d] = now + 0.12
             }
+        } else if now - lastDiskActivityTime > 1.5,
+                  (0..<Self.visibleDrives).contains(where: { disks.image(drive: $0)?.dirty == true }) {
+            // ディスクの動きが止まって 1.5 秒たったら、書き換わったイメージをファイルへ書き戻す
+            // (アプリが突然終了しても、保存したファイルが残るように)
+            disks.flushAll()
         }
         var info = [DriveInfo]()
         for i in 0..<Self.visibleDrives {
