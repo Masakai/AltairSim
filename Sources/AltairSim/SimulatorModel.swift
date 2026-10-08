@@ -16,6 +16,22 @@ final class SimulatorModel: ObservableObject {
     }
     @Published var terminalText = ""
     @Published var uppercaseInput = true
+
+    /// 削除キー(Mac の delete)が端末へ送るコード。プログラムごとに期待するコードが違う。
+    enum DeleteKey: String, CaseIterable, Identifiable {
+        case backspace = "BS(^H)"
+        case rubout = "DEL(7F)"
+        case underscore = "_(Altair BASIC)"
+        var id: String { rawValue }
+        var code: UInt8 {
+            switch self {
+            case .backspace: return 0x08
+            case .rubout: return 0x7F
+            case .underscore: return 0x5F
+            }
+        }
+    }
+    @Published var deleteKey: DeleteKey = .backspace
     @Published var statusMessage = ""
     /// 端末のキーボード飾りで光らせているキー(ラベル)
     /// ディスクドライブ A・B の表示用状態
@@ -191,8 +207,13 @@ final class SimulatorModel: ObservableObject {
     }
 
     func typeReturn() { machine.sendSerial(0x0D) }
-    /// Altair BASIC の rubout は 0x5F(_)または 0x7F。0x08 は削除として扱われない(ROM で確認済み)。
-    func typeBackspace() { machine.sendSerial(0x5F) }
+    /// 削除キー。既定は BS(^H)で、CP/M は「BS-SP-BS」で画面上の文字を消す。
+    /// DEL(7Fh)だと CP/M は削除した文字をそのままエコーする。Altair BASIC は 5Fh か 7Fh だけを削除として扱い、
+    /// 08h は削除にならない(ROM で確認済み)ので、BASIC を起動したときは自動で '_' に切り替える。
+    func typeBackspace() { machine.sendSerial(deleteKey.code) }
+
+    /// 前方削除(fn + delete)は、ADM-3A の RUB OUT キーにあたる 7Fh を送る。
+    func typeRubout() { machine.sendSerial(0x7F) }
     func clearTerminal() { terminalText = "" }
 
     // MARK: プログラム読み込み
@@ -219,6 +240,7 @@ final class SimulatorModel: ObservableObject {
             machine.reset()  // 前回の HLT 状態などを解除(RESET)
             machine.removeROMs()
             machine.setRAMSize(0x8000)
+            deleteKey = .underscore  // Altair BASIC は 08h を削除として扱わない
             var address: UInt16 = 0xE000
             for name in names {
                 let bytes = [UInt8](try Data(contentsOf: dir.appendingPathComponent(name)))
@@ -300,6 +322,7 @@ final class SimulatorModel: ObservableObject {
             machine.removeROMs()
             machine.setRAMSize(0x10000)
             machine.clearMemory()
+            deleteKey = .backspace  // CP/M は ^H で画面上の文字を消す
             for d in 0..<Self.visibleDrives { machine.disks.unmount(drive: d) }
             for f in files {
                 let url = try workingCopy(of: f.name)

@@ -15,6 +15,10 @@ struct TerminalControls: View {
                 ForEach(SimulatorModel.Baud.all) { Text($0.label).tag($0) }
             }
             .fixedSize()
+            Picker("削除キー", selection: $model.deleteKey) {
+                ForEach(SimulatorModel.DeleteKey.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .fixedSize()
             Toggle("小文字を大文字に変換", isOn: $model.uppercaseInput).font(.caption)
             Spacer()
             Button("端末をクリア", action: model.clearTerminal)
@@ -26,14 +30,25 @@ struct TerminalView: View {
     @ObservedObject var model: SimulatorModel
     @FocusState private var focused: Bool
 
+    /// Mac の delete キー(後退削除)は U+007F、fn + delete(前方削除)は U+F728 の文字として届く。
+    /// `.delete` との比較では一致しないので、文字で判定する。
+    private enum DeleteKind { case backward, forward }
+    private static func deleteKind(of key: KeyEquivalent) -> DeleteKind? {
+        switch key.character {
+        case "\u{7F}", "\u{08}": return .backward
+        case "\u{F728}": return .forward
+        default: return nil
+        }
+    }
+
     /// 押されたキーに対応する飾りキーのラベル(修飾キーも含む)
     private static func keyCapLabels(for press: KeyPress) -> [String] {
         var labels: [String] = []
         if press.modifiers.contains(.control) { labels.append("CTRL") }
         if press.modifiers.contains(.shift) { labels.append("SHIFT") }
+        if Self.deleteKind(of: press.key) != nil { labels.append("RUB"); return labels }
         switch press.key {
         case .return: labels.append("RETURN")
-        case .delete, .deleteForward: labels.append("RUB")
         case .tab: labels.append("TAB")
         case .escape: labels.append("ESC")
         case .space: labels.append("SPACE")
@@ -55,9 +70,10 @@ struct TerminalView: View {
             .focusEffectDisabled()
             .onKeyPress(phases: [.down, .repeat]) { press in
                 model.flashKeys(Self.keyCapLabels(for: press))
-                switch press.key {
-                case .return: model.typeReturn()
-                case .delete: model.typeBackspace()
+                switch (press.key, Self.deleteKind(of: press.key)) {
+                case (_, .backward?): model.typeBackspace()
+                case (_, .forward?): model.typeRubout()
+                case (.return, _): model.typeReturn()
                 default:
                     if press.modifiers.contains(.control), let c = press.characters.unicodeScalars.first {
                         model.machine.sendSerial(UInt8(c.value & 0x1F))
