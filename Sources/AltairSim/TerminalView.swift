@@ -62,7 +62,7 @@ struct TerminalView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ADM3AFrame(litKeys: model.litKeys) {
-                CRTScreen(text: model.terminalText)
+                CRTScreen(screen: model.screen)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .focusable()
@@ -163,25 +163,9 @@ private struct ADM3AFrame<Content: View>: View {
 // MARK: CRT 画面(80 桁 × 24 行)
 
 private struct CRTScreen: View {
-    let text: String
-    static let columns = 80
-    static let rows = 24
+    let screen: TerminalScreen
     // Menlo の文字幅は文字サイズの約 0.602 倍
     private static let advance: CGFloat = 0.602
-
-    /// 端末テキストを 80 桁で折り返し、末尾 24 行を取り出す。末尾にカーソル(█)を付ける。
-    private var visibleRows: [String] {
-        var rows: [String] = []
-        for line in (text + "█").split(separator: "\n", omittingEmptySubsequences: false) {
-            var rest = Substring(line)
-            if rest.isEmpty { rows.append(""); continue }
-            while !rest.isEmpty {
-                rows.append(String(rest.prefix(Self.columns)))
-                rest = rest.dropFirst(Self.columns)
-            }
-        }
-        return Array(rows.suffix(Self.rows))
-    }
 
     var body: some View {
         GeometryReader { geo in
@@ -191,15 +175,19 @@ private struct CRTScreen: View {
             let padY = size.height * 0.05
             let textW = size.width - padX * 2
             let textH = size.height - padY * 2
-            let fontSize = textW / (CGFloat(Self.columns) * Self.advance)
-            let rowH = textH / CGFloat(Self.rows)
+            let columns = CGFloat(TerminalScreen.columns)
+            let rows = CGFloat(TerminalScreen.rows)
+            let fontSize = textW / (columns * Self.advance)
+            let cellW = textW / columns
+            let rowH = textH / rows
+            let cursor = screen.displayCursor
 
             ZStack(alignment: .topLeading) {
                 ADM3APalette.screen
 
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(visibleRows.enumerated()), id: \.offset) { _, row in
-                        Text(row.isEmpty ? " " : row)
+                    ForEach(0..<TerminalScreen.rows, id: \.self) { r in
+                        Text(screen.rowString(r))
                             .font(.custom("Menlo", size: fontSize))
                             .foregroundStyle(ADM3APalette.phosphor)
                             .shadow(color: ADM3APalette.phosphor.opacity(0.6), radius: fontSize * 0.25)
@@ -210,6 +198,12 @@ private struct CRTScreen: View {
                 }
                 .frame(width: textW, height: textH, alignment: .topLeading)
                 .offset(x: padX, y: padY)
+
+                // カーソル(文字の上に半透明のブロックを重ねる。下の文字も読める)
+                Rectangle()
+                    .fill(ADM3APalette.phosphor.opacity(0.75))
+                    .frame(width: cellW, height: rowH * 0.9)
+                    .offset(x: padX + CGFloat(cursor.col) * cellW, y: padY + CGFloat(cursor.row) * rowH + rowH * 0.05)
 
                 // 走査線
                 Canvas { ctx, sz in

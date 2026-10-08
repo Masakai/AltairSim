@@ -14,7 +14,7 @@ final class SimulatorModel: ObservableObject {
     @Published var switches: UInt16 = 0 {
         didSet { machine.switches = switches }
     }
-    @Published var terminalText = ""
+    @Published var screen = TerminalScreen()
     @Published var uppercaseInput = true
 
     /// 削除キー(Mac の delete)が端末へ送るコード。プログラムごとに期待するコードが違う。
@@ -225,13 +225,7 @@ final class SimulatorModel: ObservableObject {
     // MARK: 端末
 
     private func appendTerminal(_ raw: UInt8) {
-        switch raw & 0x7F {
-        case 0x0A: terminalText.append("\n")
-        case 0x08, 0x7F: if !terminalText.isEmpty { terminalText.removeLast() }
-        case 0x20...0x7E: terminalText.append(Character(UnicodeScalar(raw & 0x7F)))
-        default: break  // CR などの制御文字は無視(LF で改行)
-        }
-        if terminalText.count > 20_000 { terminalText.removeFirst(5_000) }
+        screen.put(raw)
     }
 
     func typeKey(_ characters: String) {
@@ -263,7 +257,7 @@ final class SimulatorModel: ObservableObject {
 
     /// 前方削除(fn + delete)は、ADM-3A の RUB OUT キーにあたる 7Fh を送る。
     func typeRubout() { machine.sendSerial(0x7F) }
-    func clearTerminal() { terminalText = "" }
+    func clearTerminal() { screen = TerminalScreen() }
 
     // MARK: プログラム読み込み
 
