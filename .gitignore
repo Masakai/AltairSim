@@ -3,3 +3,19 @@
 *.xcodeproj
 .swiftpm/
 brag-output/
+
+# ROM・ディスクイメージ・テストプログラム(配布元のライセンスの都合でリポジトリに含めない。取り込み方は docs/library.md)
+*.dsk
+*.DSK
+*.img
+*.rom
+*.bin
+*.com
+*.COM
+library/
+# 680b の S レコード(自作の Tests/Resources/6800/*.s19 は対象外)
+MON680.*
+SWIMON.*
+BOOT.*
+paper-basic-*.s19
+cassette-basic-*.s19
