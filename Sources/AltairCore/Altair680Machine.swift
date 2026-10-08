@@ -4,6 +4,9 @@
 /// - 0000〜: RAM(標準 1KB。ここでは `ramSize` で指定。ジャンパで開始番地を変える構成は再現しない)
 /// - F000: ACIA 制御/状態、F001: ACIA データ、F002: ストラップ(bit7 = 1 で「端末なし」)
 /// - FF00〜FFFF: PROM モニタ(ベクタは FFF8〜FFFF)
+/// - 68-UIO ボード(`uioInstalled` が true のとき。PIA のレジスタ選択は、アドレスの最下位ビットが反転した配線で、
+///   偶数番地 = 制御レジスタ、奇数番地 = データ/方向レジスタ。F008 が制御 A、F009 がデータ A、F00A が制御 B、F00B がデータ B): F006/F007 に 2 つ目の ACIA、F008〜F00B に PIA #1、F00C〜F00F に PIA #2。
+///   PIA に FD3712 ディスクコントローラがつながる(`disks`)。FLEX や CP/68 の起動 PROM は FC00 に置く
 ///
 /// フロントパネル(680b の Operators Manual による)
 /// - HALT 中は、アドレススイッチが示す番地をアドレス LED に、その中身をデータ LED に出す
@@ -43,6 +46,11 @@ public final class Altair680Machine: Bus {
     private var aciaControlRegister: UInt8 = 0
     public private(set) var cycleCounter = 0
     private var txBusyUntil = 0
+
+    /// 68-UIO ボード(2 つ目の ACIA と 2 つの PIA)が差さっているか
+    public var uioInstalled = false
+    /// 68-UIO の PIA 経由でつながる FD3712 ディスクコントローラ(ドライブ 4 台まで)
+    public private(set) var disks: FD3712Controller!
     /// 送信のボーレート。nil なら制限なし
     public var baudRate: Int?
     private var cyclesPerCharacter: Int {
@@ -55,6 +63,15 @@ public final class Altair680Machine: Bus {
         self.ramSize = min(max(ramSize, 0x0100), 0xF000)
         cpu = CPU6800(bus: self)
         for i in 0..<self.ramSize { kinds[i] = .ram }
+        disks = FD3712Controller(clockHz: Self.clockHz, now: { [unowned self] in self.cycleCounter })
+    }
+
+    /// RAM の実装量を変える(ROM は維持)。内容は消さない。
+    public func setRAMSize(_ size: Int) {
+        ramSize = min(max(size, 0x0100), 0xF000)
+        for i in 0..<0x10000 where kinds[i] != .rom {
+            kinds[i] = i < ramSize ? .ram : .unmapped
+        }
     }
 
     // MARK: Bus
@@ -67,6 +84,16 @@ public final class Altair680Machine: Bus {
     }
 
     public func write(_ addr: UInt16, _ value: UInt8) {
+        if uioInstalled, (0xF006...0xF00F).contains(addr) {
+            switch addr {
+            case 0xF008...0xF00B: disks.pia1.write(Int(addr - 0xF008) ^ 1, value)
+            case 0xF00C...0xF00F: disks.pia2.write(Int(addr - 0xF00C) ^ 1, value)
+            default: break                           // UIO の ACIA(端末はつながっていない)
+            }
+            lastAddress = addr
+            lastData = value
+            return
+        }
         switch addr {
         case Self.aciaControl:
             aciaControlRegister = value
@@ -86,6 +113,18 @@ public final class Altair680Machine: Bus {
 
     /// side = true のときは、データレジスタの読み出しで受信バッファを消費する
     private func peekBus(_ addr: UInt16, side: Bool) -> UInt8 {
+        if uioInstalled, (0xF006...0xF00F).contains(addr) {
+            switch addr {
+            case 0xF006: return 0x02                  // UIO の ACIA: 送信可、受信なし
+            case 0xF007: return 0
+            case 0xF008...0xF00B:
+                // 副作用(ハンドシェイクのストローブ)があるので、パネル表示用の覗き見では PIA に触らない
+                return side ? disks.pia1.read(Int(addr - 0xF008) ^ 1) : 0xFF
+            case 0xF00C...0xF00F:
+                return side ? disks.pia2.read(Int(addr - 0xF00C) ^ 1) : 0xFF
+            default: return 0xFF
+            }
+        }
         switch addr {
         case Self.aciaControl:
             let tdre: UInt8 = cycleCounter >= txBusyUntil ? 0x02 : 0
@@ -136,6 +175,7 @@ public final class Altair680Machine: Bus {
 
     /// RESET: CPU とシリアルを初期状態に戻し、PC をリセットベクタから読む
     public func reset() {
+        disks.reset()
         cpu.reset()
         aciaControlRegister = 0
         serialInput.removeAll()
@@ -170,7 +210,7 @@ public final class Altair680Machine: Bus {
     public func loadS19(_ text: String) throws -> Int {
         var count = 0
         for rec in try S19Loader.parse(text) {
-            if Int(rec.address) >= Self.romStart {
+            if Int(rec.address) >= 0xF000 {          // F000 以上は ROM(起動 PROM は FC00、モニタは FF00)
                 loadROM(rec.bytes, at: rec.address)
             } else {
                 load(rec.bytes, at: rec.address)
@@ -178,6 +218,14 @@ public final class Altair680Machine: Bus {
             count += rec.bytes.count
         }
         return count
+    }
+
+    /// ROM をすべて外す(RAM の内容は保持)
+    public func removeROMs() {
+        for i in 0..<0x10000 where kinds[i] == .rom {
+            kinds[i] = i < ramSize ? .ram : .unmapped
+            memory[i] = 0
+        }
     }
 
     public func clearMemory() {

@@ -1,42 +1,57 @@
 import Foundation
 
-/// 8 インチフロッピーのイメージ(77 トラック × 32 セクタ × 137 バイト = 337,568 バイト)。
-/// 配布されている .dsk には末尾に余白がある場合がある(CP/M 2.2 は 337,664 バイト)ので、それ以上のサイズを受け付ける。
+/// 8 インチフロッピーのイメージ。配布されている .dsk には末尾に余白がある場合があるので、必要サイズ以上を受け付ける。
 public final class DiskImage {
-    public static let tracks = 77
-    public static let sectorsPerTrack = 32
-    public static let bytesPerSector = 137
-    public static let size = tracks * sectorsPerTrack * bytesPerSector
+    /// ディスクの寸法
+    public struct Geometry: Equatable {
+        public let tracks: Int
+        public let sectorsPerTrack: Int
+        public let bytesPerSector: Int
+        public var size: Int { tracks * sectorsPerTrack * bytesPerSector }
+
+        /// MITS 88-DCDD: 77 トラック × 32 セクタ × 137 バイト = 337,568 バイト
+        public static let mitsDCDD = Geometry(tracks: 77, sectorsPerTrack: 32, bytesPerSector: 137)
+        /// IBM 3740 形式(Altair 680 の FD3712): 77 トラック × 26 セクタ × 128 バイト = 256,256 バイト
+        public static let ibm3740 = Geometry(tracks: 77, sectorsPerTrack: 26, bytesPerSector: 128)
+    }
+
+    // 88-DCDD 用の定数(以前の呼び出しとの互換のため残す)
+    public static let tracks = Geometry.mitsDCDD.tracks
+    public static let sectorsPerTrack = Geometry.mitsDCDD.sectorsPerTrack
+    public static let bytesPerSector = Geometry.mitsDCDD.bytesPerSector
+    public static let size = Geometry.mitsDCDD.size
 
     public enum LoadError: Error, CustomStringConvertible {
-        case wrongSize(Int)
+        case wrongSize(Int, need: Int)
         public var description: String {
             switch self {
-            case .wrongSize(let n):
-                return "ディスクイメージのサイズが \(n) バイトです(\(DiskImage.size) バイト以上が必要)"
+            case .wrongSize(let n, let need):
+                return "ディスクイメージのサイズが \(n) バイトです(\(need) バイト以上が必要)"
             }
         }
     }
 
+    public let geometry: Geometry
     public private(set) var bytes: [UInt8]
     public let url: URL?
     public private(set) var dirty = false
     /// true の間は書き込みを無視する
     public var writeProtected = false
 
-    public init(bytes: [UInt8], url: URL? = nil) throws {
-        guard bytes.count >= Self.size else { throw LoadError.wrongSize(bytes.count) }
+    public init(bytes: [UInt8], url: URL? = nil, geometry: Geometry = .mitsDCDD) throws {
+        guard bytes.count >= geometry.size else { throw LoadError.wrongSize(bytes.count, need: geometry.size) }
         self.bytes = bytes
         self.url = url
+        self.geometry = geometry
     }
 
-    public convenience init(contentsOf url: URL) throws {
-        try self.init(bytes: [UInt8](try Data(contentsOf: url)), url: url)
+    public convenience init(contentsOf url: URL, geometry: Geometry = .mitsDCDD) throws {
+        try self.init(bytes: [UInt8](try Data(contentsOf: url)), url: url, geometry: geometry)
     }
 
-    /// 空のフォーマット済みイメージ(全バイト 0xE5 ではなく 0。CP/M 側で初期化して使う)
-    public static func blank() -> DiskImage {
-        try! DiskImage(bytes: [UInt8](repeating: 0, count: size))
+    /// 空のフォーマット済みイメージ(全バイト 0)
+    public static func blank(geometry: Geometry = .mitsDCDD) -> DiskImage {
+        try! DiskImage(bytes: [UInt8](repeating: 0, count: geometry.size), geometry: geometry)
     }
 
     func read(at offset: Int) -> UInt8? {
@@ -57,10 +72,23 @@ public final class DiskImage {
     }
 }
 
+/// ディスクコントローラに共通の、装着・取り外しと表示用の情報。
+/// アプリのドライブ画面は、機種(Altair 8800 の 88-DCDD、Altair 680 の FD3712)を問わずこの口から状態を読む。
+public protocol DiskSubsystem: AnyObject {
+    func mount(_ image: DiskImage, drive: Int)
+    func unmount(drive: Int)
+    func image(drive: Int) -> DiskImage?
+    func headPosition(drive: Int) -> (track: Int, sector: Int)?
+    var activityCounter: Int { get }
+    var lastActiveDrive: Int? { get }
+    func flushAll()
+    func reset()
+}
+
 /// MITS 88-DCDD フロッピーディスクコントローラ(ポート 08h-0Ah)。
 /// 回転待ちは時間ではなく「セクタレジスタを読むたびに 1 セクタ進む」簡易モデルで、
 /// CP/M の BIOS やディスクブートローダ(88dskrom)はこれで動作する。
-public final class DiskController {
+public final class DiskController: DiskSubsystem {
     public static let maxDrives = 16
 
     public static let statusPort: UInt8 = 0x08  // 読み: ステータス / 書き: ドライブ選択

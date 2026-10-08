@@ -68,7 +68,6 @@ final class SimulatorModel: ObservableObject {
     @Published var run680 = false
     /// 「端末なし」ストラップ。true だとモニタはリセット後に 0000 番地へ飛ぶ(フロントパネルだけで使う構成)
     @Published var noTerminal680 = false { didSet { machine680.noTerminal = noTerminal680 } }
-    private var monitor680Loaded = false
 
     private var timer: Timer?
     private var lastTick = ProcessInfo.processInfo.systemUptime
@@ -144,22 +143,28 @@ final class SimulatorModel: ObservableObject {
         refresh()
     }
 
+    /// 動かしている機種のディスクコントローラ(8800 は 88-DCDD、680b は 68-UIO 経由の FD3712)
+    var activeDisks: DiskSubsystem {
+        computer == .altair680b ? machine680.disks : machine.disks
+    }
+
     private func refreshDrives() {
         let now = ProcessInfo.processInfo.systemUptime
-        let counter = machine.disks.activityCounter
+        let disks = activeDisks
+        let counter = disks.activityCounter
         if counter != lastDiskActivity {
             lastDiskActivity = counter
-            if let d = machine.disks.lastActiveDrive, d < driveBusyUntil.count {
+            if let d = disks.lastActiveDrive, d < driveBusyUntil.count {
                 driveBusyUntil[d] = now + 0.12
             }
         }
         var info = [DriveInfo]()
         for i in 0..<Self.visibleDrives {
             var d = DriveInfo()
-            if let image = machine.disks.image(drive: i) {
+            if let image = disks.image(drive: i) {
                 d.loaded = true
                 d.name = image.url?.lastPathComponent ?? "DISK"
-                d.track = machine.disks.headPosition(drive: i)?.track ?? 0
+                d.track = disks.headPosition(drive: i)?.track ?? 0
                 d.busy = now < driveBusyUntil[i]
             }
             info.append(d)
@@ -168,13 +173,13 @@ final class SimulatorModel: ObservableObject {
     }
 
     private func refresh() {
+        refreshDrives()
         if computer == .altair680b {
             run680 = machine680.running
             led680Address = machine680.addressLEDs
             led680Data = machine680.dataLEDs
             return
         }
-        refreshDrives()
         running = machine.running
         status = machine.status
         inte = machine.cpu.inte
@@ -345,14 +350,14 @@ final class SimulatorModel: ObservableObject {
     // MARK: ディスクと CP/M
 
     /// アプリ同梱のイメージを書き込み可能な作業用コピーとして Application Support に置く
-    private func workingCopy(of name: String) throws -> URL {
+    private func workingCopy(of name: String, resourceDir: String = "disks") throws -> URL {
         let fm = FileManager.default
         let support = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             .appendingPathComponent("AltairSim/disks", isDirectory: true)
         try fm.createDirectory(at: support, withIntermediateDirectories: true)
         let dest = support.appendingPathComponent(name)
         if !fm.fileExists(atPath: dest.path) {
-            guard let src = Bundle.module.resourceURL?.appendingPathComponent("disks/\(name)"),
+            guard let src = Bundle.module.resourceURL?.appendingPathComponent("\(resourceDir)/\(name)"),
                   fm.fileExists(atPath: src.path) else {
                 throw CocoaError(.fileNoSuchFile)
             }
@@ -428,13 +433,13 @@ final class SimulatorModel: ObservableObject {
 
     func mountDisk(drive: Int) {
         let panel = NSOpenPanel()
-        panel.message = "ドライブ \(Character(UnicodeScalar(UInt8(65 + drive)))) に装着するディスクイメージ(.dsk、337,568 バイト)を選択"
+        panel.message = "ドライブ \(Character(UnicodeScalar(UInt8(65 + drive)))) に装着するディスクイメージ(.dsk、\(diskGeometry.size) バイト以上)を選択"
         panel.allowedContentTypes = [.data]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
-            let disk = try DiskImage(contentsOf: url)
-            machine.disks.unmount(drive: drive)
-            machine.disks.mount(disk, drive: drive)
+            let disk = try DiskImage(contentsOf: url, geometry: diskGeometry)
+            activeDisks.unmount(drive: drive)
+            activeDisks.mount(disk, drive: drive)
             refreshDrives()
             statusMessage = "ドライブ \(Character(UnicodeScalar(UInt8(65 + drive)))): \(url.lastPathComponent) を装着しました(書き込みはファイルに直接反映されます)"
         } catch {
@@ -443,12 +448,20 @@ final class SimulatorModel: ObservableObject {
     }
 
     func ejectDisk(drive: Int) {
-        machine.disks.unmount(drive: drive)
+        activeDisks.unmount(drive: drive)
         refreshDrives()
         statusMessage = "ドライブ \(Character(UnicodeScalar(UInt8(65 + drive)))) のディスクを取り外しました"
     }
 
-    func flushDisks() { machine.disks.flushAll() }
+    func flushDisks() {
+        machine.disks.flushAll()
+        machine680.disks.flushAll()
+    }
+
+    /// 動かしている機種のディスクの寸法(8800: 88-DCDD の 137 バイト/セクタ、680b: IBM 3740 の 128 バイト × 26)
+    private var diskGeometry: DiskImage.Geometry {
+        computer == .altair680b ? .ibm3740 : .mitsDCDD
+    }
 
     func loadFile() {
         let panel = NSOpenPanel()
@@ -515,17 +528,29 @@ final class SimulatorModel: ObservableObject {
         }
     }
 
+    /// 680b の構成(モニタ、RAM の量、68-UIO ボードの有無、起動 PROM)
+    struct Config680 {
+        var monitor = "MON680.S19"        // FF00〜。ディスク OS には、SWI を RAM 経由にした SWIMON を使う
+        var ramSize = 0x2000
+        var uio = false
+        var bootPROM: String?             // FC00 に置く起動 PROM(ディスク OS 用)
+    }
+
     /// 680b の PROM モニタ(ACIA 版、FF00〜)を載せて、リセットして RUN にする。
     /// withTerminal = false は「端末なし」ストラップで、モニタは 0000 番地へ飛ぶ(フロントパネル運用)。
-    func boot680b(withTerminal: Bool) {
+    func boot680b(withTerminal: Bool, config: Config680 = Config680()) {
         guard let dir = Bundle.module.resourceURL?.appendingPathComponent("altair680") else { return }
         do {
-            if !monitor680Loaded {
-                let text = try String(contentsOf: dir.appendingPathComponent("monitor/MON680.S19"), encoding: .utf8)
-                try machine680.loadS19(text)
-                monitor680Loaded = true
-            }
             machine680.setRunning(false)
+            machine680.removeROMs()
+            machine680.setRAMSize(config.ramSize)
+            machine680.uioInstalled = config.uio
+            let monitor = try String(contentsOf: dir.appendingPathComponent("monitor/\(config.monitor)"), encoding: .utf8)
+            try machine680.loadS19(monitor)
+            if let prom = config.bootPROM {
+                let text = try String(contentsOf: dir.appendingPathComponent("boot/\(prom)"), encoding: .utf8)
+                try machine680.loadS19(text)
+            }
             machine680.clearMemory()
             noTerminal680 = !withTerminal
             deleteKey = .underscore  // Altair BASIC(680)も 8800 版と同じく '_' で 1 文字削除
@@ -539,6 +564,43 @@ final class SimulatorModel: ObservableObject {
                 : "680b を「端末なし」で起動しました(リセット後は 0000 番地から実行します)"
         } catch {
             statusMessage = "680b のモニタの読み込みに失敗: \(error)"
+        }
+    }
+
+    /// 68-UIO と FD3712 で動くディスク OS
+    enum DiskOS {
+        case flex3, cpm68
+        var title: String { self == .flex3 ? "FLEX 3.0" : "CP/68" }
+        var imageName: String { self == .flex3 ? "flex3-680.dsk" : "cp68-altair680.dsk" }
+    }
+
+    /// ディスク OS を起動する。実機の手順と同じく、SWIMON と起動 PROM(FC00)を載せ、68-UIO を差し、
+    /// ドライブ 0 にディスクを入れて、モニタの J FC00 で起動 PROM へ飛ぶ。
+    func boot680Disk(_ os: DiskOS) {
+        guard let base = Bundle.module.resourceURL?.appendingPathComponent("altair680") else { return }
+        let missing = ["boot/BOOT.S19", "disks/\(os.imageName)", "monitor/SWIMON.S19"].filter {
+            !FileManager.default.fileExists(atPath: base.appendingPathComponent($0).path)
+        }
+        guard missing.isEmpty else {
+            statusMessage = "\(os.title) の起動に必要なファイルがありません: \(missing.joined(separator: "、"))(Resources/altair680/ に置く。取得元は Resources/README.md)"
+            return
+        }
+        do {
+            let url = try workingCopy(of: os.imageName, resourceDir: "altair680/disks")
+            let image = try DiskImage(contentsOf: url, geometry: .ibm3740)
+            // 配布の FLEX 3.0 のイメージは、ブートローダにシステムファイルの位置が書かれていない(LINK.CMD を実行する前の状態)。
+            // LINK と同じ処理を、作業用コピーに行う
+            let linked = os == .flex3 && FLEXImage.linkBootLoader(image)
+            boot680b(withTerminal: true, config: Config680(monitor: "SWIMON.S19", ramSize: 0xC000, uio: true, bootPROM: "BOOT.S19"))
+            for d in 0..<FD3712Controller.maxDrives { machine680.disks.unmount(drive: d) }
+            machine680.disks.mount(image, drive: 0)
+            deleteKey = .backspace
+            for u in "JFC00".utf8 { machine680.sendSerial(u) }
+            refresh()
+            statusMessage = "\(os.title) を起動します(モニタの J FC00 で起動 PROM へ。RAM 48KB、ドライブ A: \(url.lastPathComponent)。変更は作業用コピーに保存されます)"
+                + (linked ? "。ブートローダに FLEX3.SYS の位置を書き込みました(LINK と同じ処理)" : "")
+        } catch {
+            statusMessage = "\(os.title) の起動に失敗: \(error)"
         }
     }
 

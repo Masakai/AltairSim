@@ -69,8 +69,8 @@ private struct Unit: View {
             at(70, 42, text("POWER", 9))
             at(122, 70, text("ON", 8))
             at(122, 96, text("OFF", 8))
-            at(112, 190, text("altair disk", 20, Palette.label, weight: .heavy).italic())
-            at(112, 214, text("88-DCDD", 9))
+            at(112, 190, text(model.computer == .altair680b ? "pertec" : "altair disk", 20, Palette.label, weight: .heavy).italic())
+            at(112, 214, text(model.computer == .altair680b ? "FD3712 / 68-UIO" : "88-DCDD", 9))
 
             ForEach(0..<2, id: \.self) { k in
                 Bay(model: model, index: first + k, width: 380)

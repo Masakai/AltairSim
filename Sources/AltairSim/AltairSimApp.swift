@@ -61,10 +61,27 @@ struct ContentView: View {
                     .help("PROM モニタを起動して「.」のプロンプトを出す")
                 Button("BASIC を読み込んで起動", action: model.load680BASIC)
                     .help("紙テープ版 BASIC を、モニタの L コマンドで読み込んで J 0000 で起動")
+                Button("FLEX 3.0", action: { model.boot680Disk(.flex3) })
+                    .help("68-UIO と FD3712 のディスクから FLEX 3.0 を起動(RAM 48KB)")
+                Button("CP/68", action: { model.boot680Disk(.cpm68) })
+                    .help("68-UIO と FD3712 のディスクから CP/68 を起動(RAM 48KB)")
+                Menu("ディスク") {
+                    ForEach(0..<SimulatorModel.visibleDrives, id: \.self) { d in
+                        let name = String(UnicodeScalar(UInt8(65 + d)))
+                        Button("ドライブ \(name) にディスクを装着…") { model.mountDisk(drive: d) }
+                    }
+                    Divider()
+                    ForEach(0..<SimulatorModel.visibleDrives, id: \.self) { d in
+                        let name = String(UnicodeScalar(UInt8(65 + d)))
+                        Button("ドライブ \(name) を取り外す") { model.ejectDisk(drive: d) }
+                    }
+                }
                 Toggle("端末なし(フロントパネル運用)", isOn: $model.noTerminal680).font(.caption)
                 Spacer()
             }
             TerminalControls(model: model)
+            DiskDriveView(model: model, first: 0)
+            DiskDriveView(model: model, first: 2)
         }
     }
 
