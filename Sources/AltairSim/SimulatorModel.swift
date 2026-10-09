@@ -811,11 +811,28 @@ final class SimulatorModel: ObservableObject {
         refreshThrottled(now: now)
     }
 
-    /// IMSAI CP/M 1.31 を、FIF のドライブ 0(ドライブ A)から起動する。FIF のブートが、起動セクタを読んで実行する。
-    func bootIMSAICPM() {
-        guard requireLibrary(.imsaiCPM) else { return }
+    /// IMSAI で起動できるシステムディスク。ライブラリの `imsai/disks/` に入っているもの
+    struct IMSAISystem: Identifiable, Hashable {
+        let file: String
+        let title: String
+        var id: String { file }
+    }
+    static let imsaiSystems: [IMSAISystem] = [
+        IMSAISystem(file: "imsai-cpm13.dsk", title: "IMSAI CP/M 1.31(16K)"),
+        IMSAISystem(file: "um-cpm13.dsk", title: "CP/M 1.33(52K)"),
+        IMSAISystem(file: "cpm22.dsk", title: "CP/M 2.2(54K)"),
+        IMSAISystem(file: "imdos202.dsk", title: "IMDOS 2.02(54K)"),
+        IMSAISystem(file: "imdos205r0-1.dsk", title: "IMDOS 2.05 rev.0(54K)"),
+        IMSAISystem(file: "imdos205r1-maslin.dsk", title: "IMDOS 2.05 rev.1 Maslin(16K)"),
+        IMSAISystem(file: "imdos205r1-peters.dsk", title: "IMDOS 2.05 rev.1 Peters(16K)"),
+        IMSAISystem(file: "fig80.dsk", title: "Fig-Forth(CP/M 2.2)"),
+    ]
+
+    /// 選んだシステムディスクを、FIF のドライブ 0(ドライブ A)から起動する。FIF のブートが、起動セクタを読んで実行する。
+    func bootIMSAI(_ system: IMSAISystem = IMSAISystem(file: "imsai-cpm13.dsk", title: "IMSAI CP/M 1.31(16K)")) {
+        guard requireLibrary(LibraryFeature(name: system.title, paths: ["imsai/disks/\(system.file)"])) else { return }
         do {
-            let url = try workingCopy(of: "imsai-cpm13.dsk", libraryPath: "imsai/disks/imsai-cpm13.dsk")
+            let url = try workingCopy(of: system.file, libraryPath: "imsai/disks/\(system.file)")
             switchComputerQuietly(.imsai8080)
             machineIMSAI.stop()
             machineIMSAI.removeROMs()
@@ -830,11 +847,13 @@ final class SimulatorModel: ObservableObject {
             machineIMSAI.reset()   // FIF が起動用のコードを書き込む
             machineIMSAI.start()
             refresh()
-            statusMessage = "IMSAI CP/M 1.31 をドライブ A から起動します(FIF が起動セクタを読み込みます。ディスクの変更は \(url.path) の作業用コピーに保存されます)"
+            statusMessage = "\(system.title) をドライブ A から起動します(FIF が起動セクタを読み込みます。ディスクの変更は \(url.path) の作業用コピーに保存されます)"
         } catch {
-            statusMessage = "IMSAI CP/M の起動に失敗: \(error)"
+            statusMessage = "\(system.title) の起動に失敗: \(error)"
         }
     }
+
+    func bootIMSAICPM() { bootIMSAI() }
 
     func toggleIMSAISwitch(_ bit: Int) { swIMSAI ^= (1 << UInt16(bit)); refresh() }
     func imsaiRun(_ run: Bool) { guard powered else { return }; if run { machineIMSAI.start() } else { machineIMSAI.stop() }; refresh() }

@@ -63,4 +63,35 @@ final class AssetLibraryTests: XCTestCase {
         try lib.remove(asset)
         XCTAssertFalse(lib.has(asset.path))
     }
+
+    func testImportFromTarball() throws {
+        // z80pack のアーカイブと同じ構造: <名前>/ と disks/library/<ディスク>.dsk
+        let work = try makeTemp()
+        let tree = work.appendingPathComponent("tree/disks/library", isDirectory: true)
+        try FileManager.default.createDirectory(at: tree, withIntermediateDirectories: true)
+        try Data(count: 256_256).write(to: tree.appendingPathComponent("cpm22.dsk"))
+        try Data(count: 10).write(to: tree.appendingPathComponent("other.dsk"))
+        let tgz = work.appendingPathComponent("cpm22.tgz")
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+        p.arguments = ["-czf", tgz.path, "-C", work.appendingPathComponent("tree").path, "disks"]
+        try p.run(); p.waitUntilExit()
+        XCTAssertEqual(p.terminationStatus, 0)
+
+        let lib = AssetLibrary(root: try makeTemp())
+        let report = lib.importItems([tgz])
+        XCTAssertEqual(report.imported.map(\.asset.path), ["imsai/disks/cpm22.dsk"])
+        XCTAssertEqual(report.unrecognized, ["other.dsk"])
+        XCTAssertTrue(report.sizeWarnings.isEmpty)
+        XCTAssertTrue(lib.has("imsai/disks/cpm22.dsk"))
+        // 壊れたアーカイブは失敗として報告し、他の取り込みを止めない
+        let bad = work.appendingPathComponent("bad.tgz")
+        try Data([1, 2, 3]).write(to: bad)
+        let report2 = lib.importItems([bad])
+        XCTAssertEqual(report2.failed.count, 1)
+        XCTAssertTrue(report2.imported.isEmpty)
+        // 展開用の一時フォルダは残らない
+        let leftovers = (try? FileManager.default.contentsOfDirectory(atPath: FileManager.default.temporaryDirectory.path))?.filter { $0.hasPrefix("altairsim-untar-") } ?? []
+        XCTAssertTrue(leftovers.isEmpty, "\(leftovers)")
+    }
 }

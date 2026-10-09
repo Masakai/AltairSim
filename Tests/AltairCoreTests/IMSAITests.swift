@@ -205,4 +205,37 @@ final class IMSAITests: XCTestCase {
         let stat = type(m, text, "STAT2\r")
         XCTAssertTrue(stat.contains("BYTES REMAINING"), stat)
     }
+
+    // MARK: ほかの IMSAI 用システムディスクの起動
+
+    /// 設定画面の「ほかの OS で起動」に並ぶディスクが、FIF のブートで起動して DIR が動く(期待する起動メッセージつき)
+    func testOtherIMSAISystemDisksBoot() throws {
+        let cases: [(file: String, banner: String)] = [
+            ("um-cpm13.dsk", "52K CP/M VERS 1.3"),
+            ("cpm22.dsk", "54K CP/M VERS 2.2"),
+            ("fig80.dsk", "54K CP/M VERS 2.2"),
+            ("imdos202.dsk", "54K IMDOS VERS 2.02"),
+            ("imdos205r0-1.dsk", "54K IMDOS VERS 2.05"),
+            ("imdos205r1-maslin.dsk", "16K IMDOS VERS 2.05 REV 1"),
+            ("imdos205r1-peters.dsk", "16K IMDOS VERS 2.05 REV 1"),
+        ]
+        var tested = 0
+        for c in cases {
+            let url = lib.appendingPathComponent("disks/\(c.file)")
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            let m = IMSAIMachine(ramSize: 0x10000)
+            m.disks.mount(try DiskImage(bytes: [UInt8](try Data(contentsOf: url)), geometry: .ibm3740), drive: 0)
+            var out = [UInt8]()
+            m.onSerialOutput = { out.append($0 & 0x7F) }
+            m.reset(); m.start()
+            for _ in 0..<300 { m.run(cycles: 100_000) }
+            for u in "DIR\r".utf8 { m.sendSerial(u) }
+            for _ in 0..<200 { m.run(cycles: 100_000) }
+            let text = String(decoding: out.map { $0 == 0x0D ? UInt8(ascii: "\n") : $0 }, as: UTF8.self)
+            XCTAssertTrue(text.contains(c.banner), "\(c.file): \(text.prefix(200))")
+            XCTAssertTrue(text.contains("A:") || text.contains("A: "), "\(c.file): DIR の出力がない: \(text.suffix(200))")
+            tested += 1
+        }
+        if tested == 0 { throw XCTSkip("IMSAI のシステムディスクがライブラリにありません") }
+    }
 }

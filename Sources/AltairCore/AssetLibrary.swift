@@ -99,6 +99,10 @@ public final class AssetLibrary: @unchecked Sendable {
         let gt = "8080 命令テスト"
         let g6 = "Altair 680b"
         let cpu = "https://github.com/superzazu/8080/tree/master/cpu_tests"
+        let gi = "IMSAI 8080 ディスク"
+        let imsaiDeramp = "https://deramp.com/downloads/mfe_archive/010-S100%20Computers%20and%20Boards/00-Imsai/40-Imsai%20Software/IMSAI%20CPM/imsai-cpm13/disks/library/imsai-cpm13.dsk"
+        let imsaiZ80pack = "https://www.icl1900.co.uk/unix4fun/z80pack/ftp/imsai"
+        let imsaiFormatCOM = "https://deramp.com/downloads/mfe_archive/010-S100%20Computers%20and%20Boards/00-Imsai/40-Imsai%20Software/IMDOS/FORMAT.COM"
         return [
             a("roms/8kBas_e0.bin", "Altair BASIC 8K ROM(E000h)", g8, 2048, bas),
             a("roms/8kBas_e8.bin", "Altair BASIC 8K ROM(E800h)", g8, 2048, bas),
@@ -119,7 +123,17 @@ public final class AssetLibrary: @unchecked Sendable {
             a("altair680/boot/BOOT.S19", "ディスク起動 PROM(FC00h)", g6, 596, "\(deramp680)/FLEX%201.0/BOOT.S19"),
             a("altair680/disks/flex3-680.dsk", "FLEX 3.0(680b)", g6, 256_256, "\(deramp680)/FLEX%203.0/"),
             a("altair680/disks/cp68-altair680.dsk", "CP/68(680b)", g6, 256_256, "\(deramp680)/CP68/"),
-            a("imsai/disks/imsai-cpm13.dsk", "IMSAI CP/M 1.31(FIF、IBM 3740 形式)", "IMSAI 8080", 256_256, "https://deramp.com/downloads/mfe_archive/010-S100%20Computers%20and%20Boards/00-Imsai/40-Imsai%20Software/IMSAI%20CPM/imsai-cpm13/disks/library/"),
+            // IMSAI 8080(FIF、IBM 3740 形式)。CP/M 1.31 は deramp.com、そのほかは z80pack のミラー(.tgz の中の disks/library/ にある)
+            a("imsai/disks/imsai-cpm13.dsk", "IMSAI CP/M 1.31(16K)", gi, 256_256, imsaiDeramp),
+            a("imsai/disks/um-cpm13.dsk", "CP/M 1.33(52K、Udo Munk による復元)", gi, 256_256, "\(imsaiZ80pack)/um-cpm13.tgz"),
+            a("imsai/disks/cpm22.dsk", "CP/M 2.2(54K)", gi, 256_256, "\(imsaiZ80pack)/cpm22.tgz"),
+            a("imsai/disks/fig80.dsk", "Fig-Forth 8080(CP/M 2.2 上)", gi, 256_256, "\(imsaiZ80pack)/fig80.tgz"),
+            a("imsai/disks/imdos202.dsk", "IMDOS 2.02(54K)", gi, 256_256, "\(imsaiZ80pack)/imdos202.tgz"),
+            a("imsai/disks/imdos205r0-1.dsk", "IMDOS 2.05 rev.0 ディスク 1(54K)", gi, 256_256, "\(imsaiZ80pack)/imdos205r0.tgz"),
+            a("imsai/disks/imdos205r0-2.dsk", "IMDOS 2.05 rev.0 ディスク 2", gi, 256_256, "\(imsaiZ80pack)/imdos205r0.tgz"),
+            a("imsai/disks/imdos205r1-maslin.dsk", "IMDOS 2.05 rev.1(16K、Maslin 版)", gi, 256_256, "\(imsaiZ80pack)/imdos205r1-maslin.tgz"),
+            a("imsai/disks/imdos205r1-peters.dsk", "IMDOS 2.05 rev.1(16K、Peters 版)", gi, 256_256, "\(imsaiZ80pack)/imdos205r1-peters.tgz"),
+            a("imsai/cpm/FORMAT.COM", "IMDOS の FORMAT.COM(IMSAI FORMATTER-INITIALIZER 2.05)", gi, 3712, imsaiFormatCOM),
         ]
     }()
 
@@ -158,9 +172,23 @@ public final class AssetLibrary: @unchecked Sendable {
         var report = LibraryImportReport()
         let fm = FileManager.default
         var files: [URL] = []
+        var temporaryFolders: [URL] = []
+        defer { for t in temporaryFolders { try? fm.removeItem(at: t) } }
         for u in urls {
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: u.path, isDirectory: &isDir) else { report.failed.append(u.lastPathComponent); continue }
+            let lower = u.lastPathComponent.lowercased()
+            if !isDir.boolValue, lower.hasSuffix(".tgz") || lower.hasSuffix(".tar.gz") {
+                // z80pack のミラーなどは、ディスクイメージを .tgz にまとめて配っている。一時フォルダへ展開して、中を調べる
+                guard let folder = Self.extractTarball(u) else { report.failed.append("\(u.lastPathComponent)(展開できません)"); continue }
+                temporaryFolders.append(folder)
+                if let e = fm.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) {
+                    for case let f as URL in e where (try? f.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
+                        files.append(f)
+                    }
+                }
+                continue
+            }
             if isDir.boolValue {
                 if let e = fm.enumerator(at: u, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles]) {
                     for case let f as URL in e where (try? f.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true {
@@ -194,6 +222,23 @@ public final class AssetLibrary: @unchecked Sendable {
             }
         }
         return report
+    }
+
+    /// .tgz / .tar.gz を一時フォルダへ展開する(失敗したら nil)。呼んだ側が、使い終わったフォルダを消す。
+    static func extractTarball(_ archive: URL) -> URL? {
+        let fm = FileManager.default
+        let dest = fm.temporaryDirectory.appendingPathComponent("altairsim-untar-\(UUID().uuidString)", isDirectory: true)
+        do { try fm.createDirectory(at: dest, withIntermediateDirectories: true) } catch { return nil }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+        // -x 展開、-z gzip、-f ファイル、-C 展開先。絶対パスや「..」を含むエントリは、macOS の tar が既定で拒否する
+        p.arguments = ["-xzf", archive.path, "-C", dest.path]
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        do { try p.run() } catch { try? fm.removeItem(at: dest); return nil }
+        p.waitUntilExit()
+        guard p.terminationStatus == 0 else { try? fm.removeItem(at: dest); return nil }
+        return dest
     }
 
     /// 名前が違っていても、利用者が指定した項目としてコピーする(取得元のファイル名が配布物と違うとき用)。

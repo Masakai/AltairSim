@@ -62,6 +62,13 @@ struct ContentView: View {
             HStack {
                 Button("CP/M 1.31", action: model.bootIMSAICPM)
                     .help("IMSAI CP/M 1.31 をドライブ A から起動(FIF のブートが起動セクタを読み込む)")
+                Menu("ほかの OS で起動") {
+                    ForEach(SimulatorModel.imsaiSystems) { system in
+                        Button(system.title) { model.bootIMSAI(system) }
+                            .disabled(!model.library.has("imsai/disks/\(system.file)"))
+                    }
+                }
+                .help("ライブラリに取り込んだ IMSAI 用のシステムディスクから起動します(未取り込みのものは選べません)")
                 Menu("ディスク") {
                     ForEach(0..<SimulatorModel.visibleDrives, id: \.self) { d in
                         let name = String(UnicodeScalar(UInt8(65 + d)))
