@@ -35,6 +35,7 @@ public struct LibraryFeature: Sendable {
     public static let basic680 = LibraryFeature(name: "680b BASIC", paths: ["altair680/monitor/MON680.S19", "altair680/basic/paper-basic-v1.1-r3.2.s19"])
     public static let flex3 = LibraryFeature(name: "FLEX 3.0", paths: ["altair680/monitor/SWIMON.S19", "altair680/boot/BOOT.S19", "altair680/disks/flex3-680.dsk"])
     public static let cpm68 = LibraryFeature(name: "CP/68", paths: ["altair680/monitor/SWIMON.S19", "altair680/boot/BOOT.S19", "altair680/disks/cp68-altair680.dsk"])
+    public static let imsaiCPM = LibraryFeature(name: "IMSAI CP/M 1.31", paths: ["imsai/disks/imsai-cpm13.dsk"])
 }
 
 public struct LibraryImportReport {
@@ -118,6 +119,7 @@ public final class AssetLibrary: @unchecked Sendable {
             a("altair680/boot/BOOT.S19", "ディスク起動 PROM(FC00h)", g6, 596, "\(deramp680)/FLEX%201.0/BOOT.S19"),
             a("altair680/disks/flex3-680.dsk", "FLEX 3.0(680b)", g6, 256_256, "\(deramp680)/FLEX%203.0/"),
             a("altair680/disks/cp68-altair680.dsk", "CP/68(680b)", g6, 256_256, "\(deramp680)/CP68/"),
+            a("imsai/disks/imsai-cpm13.dsk", "IMSAI CP/M 1.31(FIF、IBM 3740 形式)", "IMSAI 8080", 256_256, "https://deramp.com/downloads/mfe_archive/010-S100%20Computers%20and%20Boards/00-Imsai/40-Imsai%20Software/IMSAI%20CPM/imsai-cpm13/disks/library/"),
         ]
     }()
 

@@ -47,6 +47,22 @@ private struct Unit: View {
     let first: Int
     @Environment(\.driveScale) private var s
 
+    private var brandName: String {
+        switch model.computer {
+        case .altair680b: return "pertec"
+        case .imsai8080: return "imsai"
+        case .altair8800: return "altair disk"
+        }
+    }
+
+    private var modelName: String {
+        switch model.computer {
+        case .altair680b: return "FD3712 / 68-UIO"
+        case .imsai8080: return "FIF / FDC2-2"
+        case .altair8800: return "88-DCDD"
+        }
+    }
+
     private func at<V: View>(_ x: CGFloat, _ y: CGFloat, _ view: V) -> some View {
         view.position(x: x * s, y: y * s)
     }
@@ -69,8 +85,8 @@ private struct Unit: View {
             at(70, 42, text("POWER", 9))
             at(122, 70, text("ON", 8))
             at(122, 96, text("OFF", 8))
-            at(112, 190, text(model.computer == .altair680b ? "pertec" : "altair disk", 20, Palette.label, weight: .heavy).italic())
-            at(112, 214, text(model.computer == .altair680b ? "FD3712 / 68-UIO" : "88-DCDD", 9))
+            at(112, 190, text(brandName, 20, Palette.label, weight: .heavy).italic())
+            at(112, 214, text(modelName, 9))
 
             ForEach(0..<2, id: \.self) { k in
                 Bay(model: model, index: first + k, width: 380)

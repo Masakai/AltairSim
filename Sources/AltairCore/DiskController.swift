@@ -71,13 +71,14 @@ public final class DiskImage {
 
     /// 新しい空のイメージ(全バイト 0)をファイルとして作る。unformatted が true なら、記録ファイルも作って全セクタを未フォーマットにする。
     @discardableResult
-    public static func createBlank(at url: URL, geometry: Geometry, unformatted: Bool) throws -> DiskImage {
-        try Data(count: geometry.size).write(to: url, options: .atomic)
+    public static func createBlank(at url: URL, geometry: Geometry, unformatted: Bool, cpmDirectory: Bool = false) throws -> DiskImage {
+        let initial = cpmDirectory ? emptyCPMDirectoryImage(geometry: geometry) : [UInt8](repeating: 0, count: geometry.size)
+        try Data(initial).write(to: url, options: .atomic)
         let count = geometry.tracks * geometry.sectorsPerTrack
         let map: [Bool]? = unformatted ? [Bool](repeating: false, count: count) : nil
         if let map { try Data(map.map { $0 ? 1 : 0 }).write(to: formatMapURL(for: url), options: .atomic) }
         else { try? FileManager.default.removeItem(at: formatMapURL(for: url)) }
-        return try DiskImage(bytes: [UInt8](repeating: 0, count: geometry.size), url: url, geometry: geometry, formatMap: map)
+        return try DiskImage(bytes: initial, url: url, geometry: geometry, formatMap: map)
     }
 
     /// そのセクタ(トラック、セクタ番号は 0 始まり)はフォーマット済みか
@@ -85,6 +86,18 @@ public final class DiskImage {
         guard let formatMap else { return true }
         let i = track * geometry.sectorsPerTrack + sector
         return formatMap.indices.contains(i) ? formatMap[i] : true
+    }
+
+    /// IMSAI CP/M 1.31(IBM 3740 形式、26 セクタ × 128 バイト)の、フォーマット済みの空ディスクのバイト列。
+    /// CP/M のディレクトリ(トラック 2 の 26 セクタ、64 エントリ)だけを、空を表す E5 で埋め、残りは 0。
+    /// マニュアルの言う「工場出荷の IBM 互換ディスク」にあたり、IMSAI CP/M 1.31 はフォーマットの機能を持たないので、
+    /// ユーザーはこのような(フォーマット済みの)ディスクを使う(ユーザーガイド 6.6 SYSGEN の項)。
+    public static func emptyCPMDirectoryImage(geometry: Geometry = .ibm3740) -> [UInt8] {
+        var bytes = [UInt8](repeating: 0, count: geometry.size)
+        let directoryTrack = 2
+        let start = directoryTrack * geometry.sectorsPerTrack * geometry.bytesPerSector
+        for i in 0..<(geometry.sectorsPerTrack * geometry.bytesPerSector) { bytes[start + i] = 0xE5 }
+        return bytes
     }
 
     /// セクタを書いたので、フォーマット済みにする

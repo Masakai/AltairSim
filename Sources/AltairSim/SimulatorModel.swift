@@ -61,6 +61,7 @@ final class SimulatorModel: ObservableObject {
     enum Computer: String, CaseIterable, Identifiable {
         case altair8800 = "Altair 8800"
         case altair680b = "Altair 680b"
+        case imsai8080 = "IMSAI 8080"
         var id: String { rawValue }
     }
     @Published var computer: Computer = .altair8800 {
@@ -77,6 +78,13 @@ final class SimulatorModel: ObservableObject {
     private var savedScreen: [Computer: TerminalScreen] = [:]
     /// 680b のモニタ(PROM)を載せたか。電源を入れたとき、まだなら載せて起動する
     private var monitor680Loaded = false
+
+    // IMSAI 8080(8080 + SIO-2 + FIF フロッピー)
+    let machineIMSAI = IMSAIMachine(ramSize: 0x10000)
+    /// IMSAI のアドレススイッチ(A0〜A15)。A8〜A15 はポート FF の入力、A0〜A7 は DEPOSIT のデータ
+    @Published var swIMSAI: UInt16 = 0 { didSet { machineIMSAI.switches = swIMSAI } }
+    /// IMSAI のプログラム出力 LED(ポート FF の出力。点灯は反転)
+    @Published var imsaiProgrammedOutput: UInt8 = 0xFF
 
     // Altair 680b(Motorola 6800)
     let machine680 = Altair680Machine(ramSize: 0x2000)
@@ -117,7 +125,7 @@ final class SimulatorModel: ObservableObject {
 
     @Published var cpuSpeed: CPUSpeed = .realTime
     @Published var baud: Baud = Baud.all[0] {
-        didSet { machine.baudRate = baud.rate; machine680.baudRate = baud.rate }
+        didSet { machine.baudRate = baud.rate; machine680.baudRate = baud.rate; machineIMSAI.baudRate = baud.rate }
     }
     private static let ticksPerSecond = 60
 
@@ -130,6 +138,9 @@ final class SimulatorModel: ObservableObject {
             self?.appendTerminal(byte)
         }
         machine680.onSerialOutput = { [weak self] byte in
+            self?.appendTerminal(byte)
+        }
+        machineIMSAI.onSerialOutput = { [weak self] byte in
             self?.appendTerminal(byte)
         }
         activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical], reason: "Altair のエミュレーション")
@@ -145,6 +156,10 @@ final class SimulatorModel: ObservableObject {
         lastTick = now
         if computer == .altair680b {
             tick680(elapsed: elapsed, now: now)
+            return
+        }
+        if computer == .imsai8080 {
+            tickIMSAI(elapsed: elapsed, now: now)
             return
         }
         if powered && machine.running {
@@ -167,7 +182,11 @@ final class SimulatorModel: ObservableObject {
 
     /// 動かしている機種のディスクコントローラ(8800 は 88-DCDD、680b は 68-UIO 経由の FD3712)
     var activeDisks: DiskSubsystem {
-        computer == .altair680b ? machine680.disks : machine.disks
+        switch computer {
+        case .altair680b: return machine680.disks
+        case .imsai8080: return machineIMSAI.disks
+        case .altair8800: return machine.disks
+        }
     }
 
     private func refreshDrives() {
@@ -216,6 +235,15 @@ final class SimulatorModel: ObservableObject {
             run680 = machine680.running
             led680Address = machine680.addressLEDs
             led680Data = machine680.dataLEDs
+            return
+        }
+        if computer == .imsai8080 {
+            running = machineIMSAI.running
+            status = machineIMSAI.status
+            inte = machineIMSAI.cpu.inte
+            addressLED = machineIMSAI.running ? machineIMSAI.lastAddress : machineIMSAI.cpu.pc
+            dataLED = machineIMSAI.lastData
+            imsaiProgrammedOutput = machineIMSAI.programmedOutput
             return
         }
         running = machine.running
@@ -463,6 +491,13 @@ final class SimulatorModel: ObservableObject {
     func toggleSwitch(_ bit: Int) { switches ^= (1 << UInt16(bit)) }
     func clearSwitches() { switches = 0 }
     func setPower(_ on: Bool) {
+        if computer == .imsai8080 {
+            if on && !powered { machineIMSAI.reset() }
+            powered = on
+            if !on { machineIMSAI.stop() }
+            refresh()
+            return
+        }
         if computer == .altair680b {
             if on && !powered {
                 if monitor680Loaded {
@@ -685,21 +720,28 @@ final class SimulatorModel: ObservableObject {
     func createBlankDisk(drive: Int) {
         let letter = Character(UnicodeScalar(UInt8(65 + drive)))
         let is680 = computer == .altair680b
+        let isIMSAI = computer == .imsai8080
         let panel = NSSavePanel()
         panel.message = "新しい空ディスク(未フォーマット、\(diskGeometry.size) バイト)を保存して、ドライブ \(letter) に装着します"
-        panel.nameFieldStringValue = is680 ? "blank-680b.dsk" : "blank-8800.dsk"
+        panel.nameFieldStringValue = is680 ? "blank-680b.dsk" : (isIMSAI ? "blank-imsai.dsk" : "blank-8800.dsk")
         panel.allowedContentTypes = [.data]
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             // 680b(FD3712)は、書いて初めて存在するセクタ。記録ファイル(.fmt)で未フォーマットを覚えておく。
             // 88-DCDD は、ヘッダを書いていない生のセクタが CP/M のヘッダ検査で弾かれるので、バイト列だけでよい
-            let disk = try DiskImage.createBlank(at: url, geometry: diskGeometry, unformatted: is680)
+            // IMSAI CP/M 1.31 はフォーマットの機能を持たない(IMDOS の FORMAT.COM は CP/M 1.31 では動かない)ので、
+            // IMSAI の空ディスクは、フォーマット済みで、CP/M のディレクトリが空(E5)のディスクにする
+            let disk = isIMSAI
+                ? try DiskImage.createBlank(at: url, geometry: diskGeometry, unformatted: false, cpmDirectory: true)
+                : try DiskImage.createBlank(at: url, geometry: diskGeometry, unformatted: is680)
             activeDisks.unmount(drive: drive)
             activeDisks.mount(disk, drive: drive)
             refreshDrives()
             let tool = is680 ? "FLEX なら NEWDISK(例: NEWDISK \(drive))、CP/68 なら INIT(例: INIT \(drive))" : "CP/M なら AFORMAT \(letter):"
-            statusMessage = "ドライブ \(letter): 新しい空ディスク \(url.lastPathComponent) を作って装着しました。未フォーマットなので、\(tool) でフォーマットしてください"
+            statusMessage = isIMSAI
+                ? "ドライブ \(letter): 新しい空ディスク \(url.lastPathComponent) を作って装着しました(フォーマット済みで、CP/M のディレクトリは空です。IMSAI CP/M にはフォーマットの機能がありません)。PIP でファイルをコピーして使えます"
+                : "ドライブ \(letter): 新しい空ディスク \(url.lastPathComponent) を作って装着しました。未フォーマットなので、\(tool) でフォーマットしてください"
         } catch {
             statusMessage = "空ディスクの作成に失敗: \(error)"
         }
@@ -714,11 +756,12 @@ final class SimulatorModel: ObservableObject {
     func flushDisks() {
         machine.disks.flushAll()
         machine680.disks.flushAll()
+        machineIMSAI.disks.flushAll()
     }
 
     /// 動かしている機種のディスクの寸法(8800: 88-DCDD の 137 バイト/セクタ、680b: IBM 3740 の 128 バイト × 26)
     private var diskGeometry: DiskImage.Geometry {
-        computer == .altair680b ? .ibm3740 : .mitsDCDD
+        computer == .altair8800 ? .mitsDCDD : .ibm3740
     }
 
     func loadFile() {
@@ -747,6 +790,60 @@ final class SimulatorModel: ObservableObject {
         }
     }
 
+    // MARK: IMSAI 8080
+
+    private func tickIMSAI(elapsed: Double, now: TimeInterval) {
+        if powered && machineIMSAI.running {
+            switch cpuSpeed {
+            case .realTime:
+                cycleDebt += elapsed * Double(IMSAIMachine.clockHz)
+                let used = machineIMSAI.run(cycles: Int(cycleDebt))
+                cycleDebt = machineIMSAI.cpu.halted ? 0 : cycleDebt - Double(used)
+            case .fast:
+                while machineIMSAI.running && ProcessInfo.processInfo.systemUptime - now < 0.008 {
+                    machineIMSAI.run(cycles: 20_000)
+                }
+                cycleDebt = 0
+            }
+        } else {
+            cycleDebt = 0
+        }
+        refreshThrottled(now: now)
+    }
+
+    /// IMSAI CP/M 1.31 を、FIF のドライブ 0(ドライブ A)から起動する。FIF のブートが、起動セクタを読んで実行する。
+    func bootIMSAICPM() {
+        guard requireLibrary(.imsaiCPM) else { return }
+        do {
+            let url = try workingCopy(of: "imsai-cpm13.dsk", libraryPath: "imsai/disks/imsai-cpm13.dsk")
+            switchComputerQuietly(.imsai8080)
+            machineIMSAI.stop()
+            machineIMSAI.removeROMs()
+            machineIMSAI.setRAMSize(0x10000)
+            machineIMSAI.clearMemory()
+            for d in 0..<FIFController.maxDrives { machineIMSAI.disks.unmount(drive: d) }
+            machineIMSAI.disks.mount(try DiskImage(contentsOf: url, geometry: .ibm3740), drive: 0)
+            deleteKey = .rubout   // CP/M 1.3 の BIOS は RUBOUT(7F)を削除として扱う
+            clearTerminal()
+            powered = true
+            swIMSAI = 0
+            machineIMSAI.reset()   // FIF が起動用のコードを書き込む
+            machineIMSAI.start()
+            refresh()
+            statusMessage = "IMSAI CP/M 1.31 をドライブ A から起動します(FIF が起動セクタを読み込みます。ディスクの変更は \(url.path) の作業用コピーに保存されます)"
+        } catch {
+            statusMessage = "IMSAI CP/M の起動に失敗: \(error)"
+        }
+    }
+
+    func toggleIMSAISwitch(_ bit: Int) { swIMSAI ^= (1 << UInt16(bit)); refresh() }
+    func imsaiRun(_ run: Bool) { guard powered else { return }; if run { machineIMSAI.start() } else { machineIMSAI.stop() }; refresh() }
+    func imsaiExamine(next: Bool) { guard powered else { return }; next ? machineIMSAI.examineNext() : machineIMSAI.examine(); refresh() }
+    func imsaiDeposit(next: Bool) { guard powered else { return }; next ? machineIMSAI.depositNext() : machineIMSAI.deposit(); refresh() }
+    func imsaiReset() { guard powered else { return }; machineIMSAI.reset(); refresh() }
+    func imsaiExtClear() { guard powered else { return }; machineIMSAI.extClear(); refresh() }
+    func imsaiSingleStep() { guard powered else { return }; machineIMSAI.singleStep(); refresh() }
+
     // MARK: Altair 680b
 
     private func tick680(elapsed: Double, now: TimeInterval) {
@@ -770,7 +867,11 @@ final class SimulatorModel: ObservableObject {
 
     /// 端末への 1 バイト入力を、動かしている機種へ送る
     func sendSerial(_ byte: UInt8) {
-        if computer == .altair680b { machine680.sendSerial(byte) } else { machine.sendSerial(byte) }
+        switch computer {
+        case .altair680b: machine680.sendSerial(byte)
+        case .imsai8080: machineIMSAI.sendSerial(byte)
+        case .altair8800: machine.sendSerial(byte)
+        }
     }
 
     /// 機種を切り替える。切り替え先は、その機種の電源・端末の状態のまま(起動直後なら電源オフ)で、何も起動しない。

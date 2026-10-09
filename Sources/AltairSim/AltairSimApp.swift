@@ -33,7 +33,7 @@ struct ContentView: View {
                 ForEach(SimulatorModel.Computer.allCases) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
-            .frame(width: 280)
+            .frame(width: 420)
             Spacer()
         }
     }
@@ -41,10 +41,10 @@ struct ContentView: View {
     private var controlColumn: some View {
         VStack(spacing: 12) {
             computerPicker
-            if model.computer == .altair680b {
-                column680
-            } else {
-                column8800
+            switch model.computer {
+            case .altair680b: column680
+            case .imsai8080: columnIMSAI
+            case .altair8800: column8800
             }
             Text(model.statusMessage)
                 .font(.caption)
@@ -52,6 +52,37 @@ struct ContentView: View {
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, minHeight: 32, alignment: .topLeading)
             Spacer(minLength: 0)
+        }
+    }
+
+    /// IMSAI 8080: パネルと、IMSAI CP/M の起動ボタン、ディスク(FIF の 4 ドライブ)
+    private var columnIMSAI: some View {
+        VStack(spacing: 12) {
+            FrontPanelIMSAIView(model: model)
+            HStack {
+                Button("CP/M 1.31", action: model.bootIMSAICPM)
+                    .help("IMSAI CP/M 1.31 をドライブ A から起動(FIF のブートが起動セクタを読み込む)")
+                Menu("ディスク") {
+                    ForEach(0..<SimulatorModel.visibleDrives, id: \.self) { d in
+                        let name = String(UnicodeScalar(UInt8(65 + d)))
+                        Button("ドライブ \(name) にディスクを装着…") { model.mountDisk(drive: d) }
+                    }
+                    Divider()
+                    ForEach(0..<SimulatorModel.visibleDrives, id: \.self) { d in
+                        let name = String(UnicodeScalar(UInt8(65 + d)))
+                        Button("ドライブ \(name) に新規の空ディスク(フォーマット済み)を作成…") { model.createBlankDisk(drive: d) }
+                    }
+                    Divider()
+                    ForEach(0..<SimulatorModel.visibleDrives, id: \.self) { d in
+                        let name = String(UnicodeScalar(UInt8(65 + d)))
+                        Button("ドライブ \(name) を取り外す") { model.ejectDisk(drive: d) }
+                    }
+                }
+                Spacer()
+            }
+            TerminalControls(model: model)
+            DiskDriveView(model: model, first: 0)
+            DiskDriveView(model: model, first: 2)
         }
     }
 
