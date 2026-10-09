@@ -8,7 +8,8 @@ final class SimulatorModel: ObservableObject {
     @Published var addressLED: UInt16 = 0
     @Published var dataLED: UInt8 = 0
     @Published var running = false
-    @Published var powered = true
+    /// 表示している機種の電源。起動直後は、どの機種も電源オフ(実機と同じく、スイッチを入れるか、起動ボタンを押して始める)
+    @Published var powered = false
     @Published var status: CycleStatus = [.memr, .wo]
     @Published var inte = false
     @Published var switches: UInt16 = 0 {
@@ -62,7 +63,20 @@ final class SimulatorModel: ObservableObject {
         case altair680b = "Altair 680b"
         var id: String { rawValue }
     }
-    @Published var computer: Computer = .altair8800
+    @Published var computer: Computer = .altair8800 {
+        didSet {
+            guard computer != oldValue else { return }
+            // 電源と端末の画面は機種ごとに持つ。切り替えるたびに、出ていく機種の分を保存し、入ってくる機種の分を戻す
+            savedPower[oldValue] = powered
+            savedScreen[oldValue] = screen
+            powered = savedPower[computer] ?? false
+            screen = savedScreen[computer] ?? TerminalScreen()
+        }
+    }
+    private var savedPower: [Computer: Bool] = [:]
+    private var savedScreen: [Computer: TerminalScreen] = [:]
+    /// 680b のモニタ(PROM)を載せたか。電源を入れたとき、まだなら載せて起動する
+    private var monitor680Loaded = false
 
     // Altair 680b(Motorola 6800)
     let machine680 = Altair680Machine(ramSize: 0x2000)
@@ -111,8 +125,7 @@ final class SimulatorModel: ObservableObject {
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.flushDisks() }
         }
-        // 起動直後に電源だけ入って何も動かない状態だと故障に見えるので、CP/M 2.2 を自動で起動する
-        DispatchQueue.main.async { [weak self] in self?.bootCPM() }
+        statusMessage = "電源オフです。パネルの POWER スイッチを入れるか、「CP/M 2.2」などの起動ボタンを押してください"
         machine.onSerialOutput = { [weak self] byte in
             self?.appendTerminal(byte)
         }
@@ -451,7 +464,14 @@ final class SimulatorModel: ObservableObject {
     func clearSwitches() { switches = 0 }
     func setPower(_ on: Bool) {
         if computer == .altair680b {
-            if on && !powered { machine680.reset() }
+            if on && !powered {
+                if monitor680Loaded {
+                    machine680.reset()
+                    powered = true
+                } else {
+                    boot680b(withTerminal: true)   // 680b は PROM モニタを内蔵しているので、電源を入れるとモニタが起動する
+                }
+            }
             powered = on
             if !on { machine680.setRunning(false) }
             refresh()
@@ -753,24 +773,20 @@ final class SimulatorModel: ObservableObject {
         if computer == .altair680b { machine680.sendSerial(byte) } else { machine.sendSerial(byte) }
     }
 
+    /// 機種を切り替える。切り替え先は、その機種の電源・端末の状態のまま(起動直後なら電源オフ)で、何も起動しない。
+    /// 切り替え元の機種は止まり(時間が進まず)、戻ってくると続きから動く。
     func selectComputer(_ next: Computer) {
         guard next != computer else { return }
-        machine.stop()
-        machine680.setRunning(false)
         computer = next
         cycleDebt = 0
-        if next == .altair680b {
-            boot680b(withTerminal: true)
-        } else {
-            bootCPM()
-        }
+        lastTick = ProcessInfo.processInfo.systemUptime
+        statusMessage = powered ? "\(next.rawValue) に切り替えました" : "\(next.rawValue)(電源オフ)。POWER スイッチを入れるか、起動ボタンを押してください"
+        refresh()
     }
 
     /// 起動処理はせずに、表示する機種だけ切り替える(selectComputer は切り替え時に既定の OS を起動する)。
     private func switchComputerQuietly(_ next: Computer) {
         guard next != computer else { return }
-        machine.stop()
-        machine680.setRunning(false)
         computer = next
         cycleDebt = 0
     }
@@ -802,6 +818,7 @@ final class SimulatorModel: ObservableObject {
                 try machine680.loadS19(text)
             }
             machine680.clearMemory()
+            monitor680Loaded = true
             noTerminal680 = !withTerminal
             deleteKey = .underscore  // Altair BASIC(680)も 8800 版と同じく '_' で 1 文字削除
             clearTerminal()
