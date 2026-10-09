@@ -75,6 +75,9 @@ final class SimulatorModel: ObservableObject {
     @Published var noTerminal680 = false { didSet { machine680.noTerminal = noTerminal680 } }
 
     private var timer: Timer?
+    /// App Nap(アプリが前面を外れたときの省電力)を避けるための活動の宣言。エミュレーションは時間で進むので、
+    /// タイマーの間隔を伸ばされると、実機より大幅に遅くなる(フォーマットなど長い処理が終わらなくなる)
+    private var activity: NSObjectProtocol?
     private var lastTick = ProcessInfo.processInfo.systemUptime
     private var cycleDebt = 0.0
 
@@ -116,6 +119,7 @@ final class SimulatorModel: ObservableObject {
         machine680.onSerialOutput = { [weak self] byte in
             self?.appendTerminal(byte)
         }
+        activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .latencyCritical], reason: "Altair のエミュレーション")
         timer = Timer.scheduledTimer(withTimeInterval: 1.0 / Double(Self.ticksPerSecond), repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
@@ -145,7 +149,7 @@ final class SimulatorModel: ObservableObject {
         } else {
             cycleDebt = 0
         }
-        refresh()
+        refreshThrottled(now: now)
     }
 
     /// 動かしている機種のディスクコントローラ(8800 は 88-DCDD、680b は 68-UIO 経由の FD3712)
@@ -164,7 +168,7 @@ final class SimulatorModel: ObservableObject {
                 driveBusyUntil[d] = now + 0.12
             }
         } else if now - lastDiskActivityTime > 1.5,
-                  (0..<Self.visibleDrives).contains(where: { disks.image(drive: $0)?.dirty == true }) {
+                  (0..<Self.visibleDrives).contains(where: { disks.image(drive: $0)?.hasUnsavedChanges == true }) {
             // ディスクの動きが止まって 1.5 秒たったら、書き換わったイメージをファイルへ書き戻す
             // (アプリが突然終了しても、保存したファイルが残るように)
             disks.flushAll()
@@ -181,6 +185,16 @@ final class SimulatorModel: ObservableObject {
             info.append(d)
         }
         if info != drives { drives = info }
+    }
+
+    /// 画面(LED、ドライブの表示)の更新を、エミュレーションより低い頻度に間引く。
+    /// 更新のたびに SwiftUI がパネル全体を描き直すので、毎ティック(60 回/秒)行うと、描画でメインスレッドが埋まって
+    /// エミュレーションが実機の速さに追いつかなくなる(ディスクのフォーマットのような長い処理が進まなくなる)
+    private var lastRefreshTime: TimeInterval = 0
+    private func refreshThrottled(now: TimeInterval) {
+        guard now - lastRefreshTime >= 1.0 / 15.0 else { return }
+        lastRefreshTime = now
+        refresh()
     }
 
     private func refresh() {
@@ -646,6 +660,31 @@ final class SimulatorModel: ObservableObject {
         }
     }
 
+    /// 新しい空のディスクイメージをファイルとして作り、ドライブへ装着する。未フォーマットの状態(全バイト 0)で、
+    /// ゲスト側のフォーマット用ツール(CP/M の AFORMAT、FLEX の NEWDISK、CP/68 の INIT)でフォーマットして使う。
+    func createBlankDisk(drive: Int) {
+        let letter = Character(UnicodeScalar(UInt8(65 + drive)))
+        let is680 = computer == .altair680b
+        let panel = NSSavePanel()
+        panel.message = "新しい空ディスク(未フォーマット、\(diskGeometry.size) バイト)を保存して、ドライブ \(letter) に装着します"
+        panel.nameFieldStringValue = is680 ? "blank-680b.dsk" : "blank-8800.dsk"
+        panel.allowedContentTypes = [.data]
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            // 680b(FD3712)は、書いて初めて存在するセクタ。記録ファイル(.fmt)で未フォーマットを覚えておく。
+            // 88-DCDD は、ヘッダを書いていない生のセクタが CP/M のヘッダ検査で弾かれるので、バイト列だけでよい
+            let disk = try DiskImage.createBlank(at: url, geometry: diskGeometry, unformatted: is680)
+            activeDisks.unmount(drive: drive)
+            activeDisks.mount(disk, drive: drive)
+            refreshDrives()
+            let tool = is680 ? "FLEX なら NEWDISK(例: NEWDISK \(drive))、CP/68 なら INIT(例: INIT \(drive))" : "CP/M なら AFORMAT \(letter):"
+            statusMessage = "ドライブ \(letter): 新しい空ディスク \(url.lastPathComponent) を作って装着しました。未フォーマットなので、\(tool) でフォーマットしてください"
+        } catch {
+            statusMessage = "空ディスクの作成に失敗: \(error)"
+        }
+    }
+
     func ejectDisk(drive: Int) {
         activeDisks.unmount(drive: drive)
         refreshDrives()
@@ -706,7 +745,7 @@ final class SimulatorModel: ObservableObject {
         } else {
             cycleDebt = 0
         }
-        refresh()
+        refreshThrottled(now: now)
     }
 
     /// 端末への 1 バイト入力を、動かしている機種へ送る

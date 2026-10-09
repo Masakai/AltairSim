@@ -27,8 +27,8 @@ ARCH_FLAGS=()
 if [ "$UNIVERSAL" = 1 ]; then ARCH_FLAGS=(--arch arm64 --arch x86_64); fi
 
 echo "==> ビルド(release)"
-swift build -c release "${ARCH_FLAGS[@]}"
-BIN="$(swift build -c release "${ARCH_FLAGS[@]}" --show-bin-path)/AltairSim"
+swift build -c release ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"}
+BIN="$(swift build -c release ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"} --show-bin-path)/AltairSim"
 [ -x "$BIN" ] || { echo "実行ファイルが見つかりません: $BIN" >&2; exit 1; }
 
 echo "==> アイコン"

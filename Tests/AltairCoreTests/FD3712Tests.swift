@@ -180,6 +180,78 @@ final class FD3712Tests: XCTestCase {
         XCTAssertNotEqual(doCmd(m, cREAD, 0) & sCRCERR, 0)
     }
 
+    // MARK: 未フォーマットのディスク
+
+    private func tempURL(_ name: String) -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("fd3712-\(UUID().uuidString)-\(name)")
+    }
+
+    func testUnformattedSectorsFailToReadUntilWritten() throws {
+        let url = tempURL("blank.dsk")
+        defer { try? FileManager.default.removeItem(at: url); try? FileManager.default.removeItem(at: DiskImage.formatMapURL(for: url)) }
+        let img = try DiskImage.createBlank(at: url, geometry: .ibm3740, unformatted: true)
+        XCTAssertEqual(img.unformattedSectorCount, 77 * 26)
+        let m = machine()
+        m.disks.mount(img, drive: 0)
+        initPia(m)
+        _ = doCmd(m, cDRVSEC, 5)
+        _ = doCmd(m, cSETTRK, 10)
+        _ = doCmd(m, cSEEK, 0)
+        XCTAssertNotEqual(doCmd(m, cREAD, 0) & sCRCERR, 0, "未フォーマットのセクタは読めない(ID が見つからない)")
+        XCTAssertNotEqual(doCmd(m, cRDCRC, 0) & sCRCERR, 0)
+        _ = doCmd(m, cCLRERR, 0)
+        let data = (0..<128).map { UInt8(($0 * 3 + 7) & 0xFF) }
+        XCTAssertEqual(wrtSec(m, data) & 0x29, 0, "書き込みは通る(これがフォーマット)")
+        XCTAssertEqual(readSec(m).bytes, data, "書いたセクタは読める")
+        XCTAssertEqual(img.unformattedSectorCount, 77 * 26 - 1)
+        _ = doCmd(m, cDRVSEC, 6)                                  // 隣のセクタは未フォーマットのまま
+        XCTAssertNotEqual(doCmd(m, cREAD, 0) & sCRCERR, 0)
+    }
+
+    func testFormatMapPersistsAndExistingImagesAreFullyFormatted() throws {
+        let url = tempURL("persist.dsk")
+        let map = DiskImage.formatMapURL(for: url)
+        defer { try? FileManager.default.removeItem(at: url); try? FileManager.default.removeItem(at: map) }
+        let img = try DiskImage.createBlank(at: url, geometry: .ibm3740, unformatted: true)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: map.path))
+        let m = machine()
+        m.disks.mount(img, drive: 0)
+        initPia(m)
+        _ = doCmd(m, cDRVSEC, 1)
+        XCTAssertEqual(wrtSec(m, [UInt8](repeating: 9, count: 128)) & 0x29, 0)
+        XCTAssertTrue(img.hasUnsavedChanges)
+        try img.flush()
+        XCTAssertFalse(img.hasUnsavedChanges)
+        let reopened = try DiskImage(contentsOf: url, geometry: .ibm3740)
+        XCTAssertEqual(reopened.unformattedSectorCount, 77 * 26 - 1, "開き直してもフォーマットの記録が残る")
+        XCTAssertEqual(reopened.bytes[0], 9)
+
+        // 全セクタを書くと記録は不要になり、ファイルも消える
+        for t in 0..<77 { for sec in 0..<26 { reopened.write(0, at: 0); reopened.markFormatted(track: t, sector: sec) } }
+        try reopened.flush()
+        XCTAssertEqual(reopened.unformattedSectorCount, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: map.path), "すべてフォーマット済みなら記録ファイルは消える")
+
+        // 記録ファイルのない既存のイメージは、すべてフォーマット済みとして扱う
+        let plain = tempURL("plain.dsk")
+        defer { try? FileManager.default.removeItem(at: plain) }
+        try Data(count: DiskImage.Geometry.ibm3740.size).write(to: plain)
+        XCTAssertEqual(try DiskImage(contentsOf: plain, geometry: .ibm3740).unformattedSectorCount, 0)
+    }
+
+    func testFormattedBlankImageReadsAsZeros() throws {
+        let url = tempURL("fmt.dsk")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let img = try DiskImage.createBlank(at: url, geometry: .ibm3740, unformatted: false)
+        XCTAssertEqual(img.unformattedSectorCount, 0)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: DiskImage.formatMapURL(for: url).path))
+        let m = machine()
+        m.disks.mount(img, drive: 0)
+        initPia(m)
+        _ = doCmd(m, cDRVSEC, 1)
+        XCTAssertEqual(readSec(m).bytes, [UInt8](repeating: 0, count: 128))
+    }
+
     func testBusyTakesRealTime() throws {
         let m = machine()
         m.disks.mount(try image(), drive: 0)

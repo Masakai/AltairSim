@@ -35,19 +35,70 @@ public final class DiskImage {
     public private(set) var bytes: [UInt8]
     public let url: URL?
     public private(set) var dirty = false
+
+    /// セクタごとの「フォーマット済み」の記録(トラック順、トラック内はセクタ順)。nil はすべてフォーマット済み。
+    /// 新規に作った空のイメージは、全セクタが未フォーマットで始まる。ファイルは生のバイト列のままなので、記録は
+    /// 別ファイル(`<イメージ>.fmt`)に置く。ファイルがなければ、すべてフォーマット済みとして扱う。
+    /// 使うのは FD3712(IBM 3740 形式のセクタは、書いて初めて存在する)。88-DCDD は、ヘッダを書いていない生のセクタが
+    /// BIOS のヘッダ検査で弾かれるので、この記録を使わない。
+    public private(set) var formatMap: [Bool]?
+    private var formatDirty = false
     /// true の間は書き込みを無視する
     public var writeProtected = false
 
-    public init(bytes: [UInt8], url: URL? = nil, geometry: Geometry = .mitsDCDD) throws {
+    public init(bytes: [UInt8], url: URL? = nil, geometry: Geometry = .mitsDCDD, formatMap: [Bool]? = nil) throws {
         guard bytes.count >= geometry.size else { throw LoadError.wrongSize(bytes.count, need: geometry.size) }
         self.bytes = bytes
         self.url = url
         self.geometry = geometry
+        if let formatMap, formatMap.count == geometry.tracks * geometry.sectorsPerTrack, formatMap.contains(false) {
+            self.formatMap = formatMap
+        }
     }
 
     public convenience init(contentsOf url: URL, geometry: Geometry = .mitsDCDD) throws {
-        try self.init(bytes: [UInt8](try Data(contentsOf: url)), url: url, geometry: geometry)
+        try self.init(bytes: [UInt8](try Data(contentsOf: url)), url: url, geometry: geometry,
+                      formatMap: Self.loadFormatMap(for: url, count: geometry.tracks * geometry.sectorsPerTrack))
     }
+
+    /// 記録ファイルの場所(`foo.dsk` なら `foo.dsk.fmt`)
+    public static func formatMapURL(for url: URL) -> URL { url.appendingPathExtension("fmt") }
+
+    private static func loadFormatMap(for url: URL, count: Int) -> [Bool]? {
+        guard let data = try? Data(contentsOf: formatMapURL(for: url)), data.count == count else { return nil }
+        return data.map { $0 != 0 }
+    }
+
+    /// 新しい空のイメージ(全バイト 0)をファイルとして作る。unformatted が true なら、記録ファイルも作って全セクタを未フォーマットにする。
+    @discardableResult
+    public static func createBlank(at url: URL, geometry: Geometry, unformatted: Bool) throws -> DiskImage {
+        try Data(count: geometry.size).write(to: url, options: .atomic)
+        let count = geometry.tracks * geometry.sectorsPerTrack
+        let map: [Bool]? = unformatted ? [Bool](repeating: false, count: count) : nil
+        if let map { try Data(map.map { $0 ? 1 : 0 }).write(to: formatMapURL(for: url), options: .atomic) }
+        else { try? FileManager.default.removeItem(at: formatMapURL(for: url)) }
+        return try DiskImage(bytes: [UInt8](repeating: 0, count: geometry.size), url: url, geometry: geometry, formatMap: map)
+    }
+
+    /// そのセクタ(トラック、セクタ番号は 0 始まり)はフォーマット済みか
+    func isFormatted(track: Int, sector: Int) -> Bool {
+        guard let formatMap else { return true }
+        let i = track * geometry.sectorsPerTrack + sector
+        return formatMap.indices.contains(i) ? formatMap[i] : true
+    }
+
+    /// セクタを書いたので、フォーマット済みにする
+    func markFormatted(track: Int, sector: Int) {
+        guard formatMap != nil else { return }
+        let i = track * geometry.sectorsPerTrack + sector
+        guard formatMap!.indices.contains(i), !formatMap![i] else { return }
+        formatMap![i] = true
+        formatDirty = true
+        if !formatMap!.contains(false) { formatMap = nil }   // 全部そろったら記録は要らない
+    }
+
+    /// 未フォーマットのセクタの数(記録がなければ 0)
+    public var unformattedSectorCount: Int { formatMap?.filter { !$0 }.count ?? 0 }
 
     /// 空のフォーマット済みイメージ(全バイト 0)
     public static func blank(geometry: Geometry = .mitsDCDD) -> DiskImage {
@@ -66,10 +117,23 @@ public final class DiskImage {
 
     /// 変更をファイルへ書き戻す(url があるときのみ)
     public func flush() throws {
-        guard dirty, let url else { return }
-        try Data(bytes).write(to: url, options: .atomic)
-        dirty = false
+        guard let url else { return }
+        if dirty {
+            try Data(bytes).write(to: url, options: .atomic)
+            dirty = false
+        }
+        if formatDirty {
+            if let formatMap {
+                try Data(formatMap.map { $0 ? 1 : 0 }).write(to: Self.formatMapURL(for: url), options: .atomic)
+            } else {
+                try? FileManager.default.removeItem(at: Self.formatMapURL(for: url))
+            }
+            formatDirty = false
+        }
     }
+
+    /// 書き戻す内容があるか(ファイルまたはフォーマットの記録)
+    public var hasUnsavedChanges: Bool { dirty || formatDirty }
 }
 
 /// ディスクコントローラに共通の、装着・取り外しと表示用の情報。
@@ -120,6 +184,11 @@ public final class DiskController: DiskSubsystem {
         var track = 0
         var sector: UInt8 = 0
         var index = 0
+        /// true のとき、ヘッドはセクタとセクタの間(セクタレジスタの bit0 = 1)にいる
+        var inGap = false
+        /// 書き込み許可の直後にヘッドアンロードを受けた。書き込み回路は、そのセクタを書き終えるまでヘッドをロードしたままにする
+        /// (マニュアル p.135「Head Unload … may be unloaded immediately after Write Enable」)
+        var unloadPending = false
     }
 
     private var drives = [Drive](repeating: Drive(), count: DiskController.maxDrives)
@@ -204,11 +273,24 @@ public final class DiskController: DiskSubsystem {
         return drives[s].status
     }
 
+    /// セクタレジスタの読み出し。実機ではセクタごとにセクタ真(bit0 = 0)の区間があり、その間が bit0 = 1 になる。
+    /// 時間を持たないこのモデルでは、読むたびに「区間の外(bit0 = 1、次のセクタの番号)」と「区間の中(bit0 = 0、セクタを進める)」を
+    /// 交互に返す。BIOS の「セクタ真を待つ」ループはどちらでも動き、AFORMAT のようにセクタの切れ目に同期するプログラムも動く。
+    ///
+    /// セクタ位置は、ディスクの回転に付いたセクタ穴から作られる信号なので、ヘッドのロードとは関係なく、
+    /// ドライブが選択されていれば読める(ヘッドのロードが要るのはデータの読み書き)。CP/M の AFORMAT は、
+    /// トラックを書き終えるとヘッドをアンロードし、ロードし直さずに次のトラックのセクタ位置を待つ。
     private func sectorRegister() -> UInt8 {
-        guard let s = selected, headIsLoaded else { return 0xFF }
-        drives[s].sector = (drives[s].sector &+ 1) % UInt8(DiskImage.sectorsPerTrack)
-        drives[s].index = 0
+        guard let s = selected else { return 0xFF }
+        let count = UInt8(DiskImage.sectorsPerTrack)
         noteActivity(s)
+        if !drives[s].inGap {
+            drives[s].inGap = true
+            return (((drives[s].sector &+ 1) % count) << 1) | 1  // 切れ目(次のセクタの番号、bit0 = 1)
+        }
+        drives[s].inGap = false
+        drives[s].sector = (drives[s].sector &+ 1) % count
+        drives[s].index = 0
         return drives[s].sector << 1  // bit0 = 0: セクタ位置にヘッドがある
     }
 
@@ -227,9 +309,31 @@ public final class DiskController: DiskSubsystem {
     private func writeData(_ value: UInt8) {
         guard let s = selected, headIsLoaded, let image = drives[s].image else { return }
         guard drives[s].status & Self.writeReady == 0 else { return }  // 書き込み未許可
+        // 書き込み区間はセクタの終わりで閉じる。それ以降に送られたバイトは、ディスクには書かれない
+        // (CP/M の AFORMAT は 137 バイトのあとにも数バイト送るので、これがないと次のセクタのヘッダを壊す)
+        guard drives[s].index < DiskImage.bytesPerSector else { return }
         image.write(value, at: offset(drives[s]))
         drives[s].index += 1
         noteActivity(s)
+        if drives[s].index >= DiskImage.bytesPerSector { completeUnloadIfPending(s) }
+    }
+
+    /// ステップのあと、ヘッドステータス(HS)は true になる(マニュアル p.134「HS — True 40 ms after head loaded or step command」)。
+    /// CP/M の AFORMAT は、トラックを書き終えるとヘッドをアンロードし、ステップインしたあと、ヘッドをロードし直さずに
+    /// 次のトラックへ書き込む。そのため、ステップはヘッドをロードした状態にする。
+    private func stepLoadsHead(_ s: Int) {
+        drives[s].status &= ~(Self.headLoaded | Self.readReady)
+    }
+
+    /// ヘッドを実際に外す(ステータスのヘッドロード・読み出し可・書き込み可のビットを戻す)
+    private func completeUnload(_ s: Int) {
+        drives[s].unloadPending = false
+        drives[s].status |= Self.headLoaded | Self.readReady | Self.writeReady
+        try? drives[s].image?.flush()
+    }
+
+    private func completeUnloadIfPending(_ s: Int) {
+        if drives[s].unloadPending { completeUnload(s) }
     }
 
     private func select(_ value: UInt8) {
@@ -253,33 +357,44 @@ public final class DiskController: DiskSubsystem {
 
     private func command(_ value: UInt8) {
         guard let s = selected else { return }
+        if value != Self.unloadHead && value != Self.writeEnable { completeUnloadIfPending(s) }
         switch value {
         case Self.stepIn:
             if drives[s].track < DiskImage.tracks - 1 {
                 drives[s].track += 1
                 drives[s].sector = 0xFF
                 drives[s].index = 0
+                drives[s].inGap = false
             }
             drives[s].status |= Self.trackZero
+            stepLoadsHead(s)
         case Self.stepOut:
             if drives[s].track > 0 {
                 drives[s].track -= 1
                 drives[s].sector = 0xFF
                 drives[s].index = 0
+                drives[s].inGap = false
             } else {
                 drives[s].status &= ~Self.trackZero
             }
+            stepLoadsHead(s)
         case Self.loadHead:
             drives[s].status &= ~(Self.headLoaded | Self.readReady)
             drives[s].sector = 0xFF  // 次のセクタ読み出しで 0 になる
+            drives[s].inGap = false
         case Self.unloadHead:
-            drives[s].status |= Self.headLoaded | Self.readReady | Self.writeReady
-            try? drives[s].image?.flush()
+            if drives[s].status & Self.writeReady == 0 {
+                // 書き込み許可中のアンロードは、書き込みが終わってから効く(writeData / 次のコマンドで確定)
+                drives[s].unloadPending = true
+            } else {
+                completeUnload(s)
+            }
         case Self.enableInterrupt:
             drives[s].status |= Self.interruptEnabled
         case Self.disableInterrupt:
             drives[s].status &= ~Self.interruptEnabled
         case Self.writeEnable:
+            completeUnloadIfPending(s)   // 前のセクタの保留中のアンロードは、ここで確定する
             drives[s].index = 0
             drives[s].status &= ~Self.writeReady
         default:

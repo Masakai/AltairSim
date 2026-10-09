@@ -83,6 +83,11 @@ struct ContentView: View {
                     Divider()
                     ForEach(0..<SimulatorModel.visibleDrives, id: \.self) { d in
                         let name = String(UnicodeScalar(UInt8(65 + d)))
+                        Button("ドライブ \(name) に新規の空ディスク(未フォーマット)を作成…") { model.createBlankDisk(drive: d) }
+                    }
+                    Divider()
+                    ForEach(0..<SimulatorModel.visibleDrives, id: \.self) { d in
+                        let name = String(UnicodeScalar(UInt8(65 + d)))
                         Button("ドライブ \(name) を取り外す") { model.ejectDisk(drive: d) }
                     }
                 }
@@ -107,6 +112,11 @@ struct ContentView: View {
                     ForEach(0..<SimulatorModel.visibleDrives, id: \.self) { d in
                         let name = String(UnicodeScalar(UInt8(65 + d)))
                         Button("ドライブ \(name) にディスクを装着…") { model.mountDisk(drive: d) }
+                    }
+                    Divider()
+                    ForEach(0..<SimulatorModel.visibleDrives, id: \.self) { d in
+                        let name = String(UnicodeScalar(UInt8(65 + d)))
+                        Button("ドライブ \(name) に新規の空ディスク(未フォーマット)を作成…") { model.createBlankDisk(drive: d) }
                     }
                     Divider()
                     ForEach(0..<SimulatorModel.visibleDrives, id: \.self) { d in

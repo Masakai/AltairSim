@@ -187,10 +187,10 @@ public final class FD3712Controller: DiskSubsystem {
             trackRegister = 0
         case Command.read:
             if let image = images[drive] {
-                if let off = sectorOffset(image) {
+                if let off = sectorOffset(image), image.isFormatted(track: headTrack[drive], sector: sector - 1) {
                     for k in 0..<buffer.count { buffer[k] = image.read(at: off + k) ?? 0 }
                 } else {
-                    errors |= Self.sCRCError       // 存在しないセクタ
+                    errors |= Self.sCRCError       // 存在しないセクタ、またはフォーマットされていない(ID が見つからない)
                 }
                 busy(microseconds: 6_400)
                 noteActivity()
@@ -201,6 +201,7 @@ public final class FD3712Controller: DiskSubsystem {
                     errors |= Self.sWriteProtect
                 } else if let off = sectorOffset(image) {
                     for k in 0..<buffer.count { image.write(buffer[k], at: off + k) }
+                    image.markFormatted(track: headTrack[drive], sector: sector - 1)   // 書いたセクタは存在する(NEWDISK はこれで全体を作る)
                 } else {
                     errors |= Self.sCRCError
                 }
@@ -209,7 +210,7 @@ public final class FD3712Controller: DiskSubsystem {
             }
         case Command.readCRC:
             if let image = images[drive] {
-                if sectorOffset(image) == nil { errors |= Self.sCRCError }
+                if sectorOffset(image) == nil || !image.isFormatted(track: headTrack[drive], sector: sector - 1) { errors |= Self.sCRCError }
                 busy(microseconds: 6_400)
                 noteActivity()
             }
