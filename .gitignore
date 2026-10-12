@@ -3,6 +3,7 @@
 *.xcodeproj
 .swiftpm/
 brag-output/
+brag-output-*/
 
 # ROM・ディスクイメージ・テストプログラム(配布元のライセンスの都合でリポジトリに含めない。取り込み方は docs/library.md)
 *.dsk
