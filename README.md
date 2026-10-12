@@ -2,6 +2,10 @@
 
 Intel 8080 搭載の Altair 8800(1975年)のシミュレータ。
 
+[![AltairSim 紹介動画(23秒、ナレーション付き)](docs/media/altairsim.jpg)](docs/media/altairsim.mp4)
+
+Altair 8800、Altair 680b、IMSAI 8080 を、実機のフロントパネルと端末つきで動かします(動画は 23 秒、ナレーション付き。画像をクリックすると再生します)。
+
 ## 実行
 
 ```bash
