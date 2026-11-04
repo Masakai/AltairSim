@@ -1,8 +1,8 @@
-# Altair 8800 Simulator (Swift / macOS)
+# AltairSim
 
 **English** | [日本語](README.ja.md) | [Website](https://masakai.github.io/AltairSim/)
 
-A simulator of the Altair 8800 (1975), built around the Intel 8080.
+A simulator of the Altair 8800 (1975), the Altair 680b and the IMSAI 8080, written in Swift for macOS.
 
 [![AltairSim intro video (23 s, narrated)](docs/media/altairsim-en.jpg)](docs/media/altairsim-en.mp4)
 
@@ -28,33 +28,6 @@ Tools/make_app.sh --install    # copy it to ~/Applications after building
 This creates `build/AltairSim.app` (the Dock icon is drawn by `Tools/make_icon.py`). It is ad hoc signed, for use on your own Mac, and not notarized. To give it to other people, you need to sign it with a Developer ID and notarize it. The bundle ID can be changed with the environment variable `BUNDLE_ID` (default `local.altairsim`), and the version with `VERSION` (default 1.0).
 
 ROMs and disk images are not included in the app, so on first use you import them from Settings (⌘,) (see "Importing ROMs and disk images" below). Imported files go to `~/Library/Application Support/AltairSim/library/`, which is shared with `swift run`.
-
-## Layout
-
-- `Sources/AltairCore`: 8080 CPU (every instruction, with clock counts), 64 KB of memory, a 2SIO-style serial port (ports 10h/11h), sense switches (port FFh), Intel HEX loader
-- `Sources/AltairSim`: the SwiftUI front panel (A0–A15 switches, address/data LEDs, EXAMINE/DEPOSIT/RUN/STEP/RESET) and the terminal
-
-## Usage
-
-- 「デモを読み込む」 (load demo) → places HELLO / ECHO at 0000; run it with RUN/STOP
-- Entering by hand: set the address switches and EXAMINE, then set the data and repeat DEPOSIT NEXT
-- For BASIC and other programs, load your own image (`.bin` goes to 0000, `.hex` goes to the record addresses) with 「ファイルを読み込む」 (load file), then RESET → RUN
-
-## IMSAI 8080
-
-Choose 「IMSAI 8080」 in the machine selector to run the IMSAI 8080. The 8080 and the S-100 bus are the same as on the Altair 8800; the panel, the serial board and the floppy are different. The CPU and memory are shared with the Altair 8800.
-
-- **Front panel (CP-A):** drawn from photos of the real machine and the CP-A manual. Top left: 8 programmed-output LEDs, 8 status-byte LEDs (MEMR, INP, M1, OUT, HLTA, STACK, WO, INTA), address LEDs A15–A8 and 8 paddles. Center: data bus LEDs, address LEDs A7–A0 and 8 paddles (which also serve as data switches). Right: the INTERRUPT ENABLED, RUN, WAIT and HOLD LEDs, and 6 control paddles (EXAMINE/EXAMINE NEXT, DEPOSIT/DEPOSIT NEXT, RESET/EXT CLR, RUN/STOP, SINGLE STEP, PWR ON/OFF). Each paddle does one thing on its upper half and another on its lower half, and they are colored blue and red.
-- **I/O ports:** `02/03` and `04/05` are channels A and B of the SIO-2 (data/status, with the same bit layout as the 8251), `FD` is the FIF floppy, and `FF` is input = upper address switches (A8–A15) and output = programmed-output LEDs (lit when the bit is 0).
-- **FIF floppy:** on the real IMSAI floppy interface, an 8080 on the board runs firmware (`fifware.asm`) that reads a 7-byte command string from memory and writes the result back to a status byte. This simulator does not run that firmware's 8080. It reproduces the behavior the host sees: checking the command string and the error codes C1–C6, A1–A3 and 93, reading, writing, formatting a track, and an approximation of the time each takes. Disks are IBM 3740 format (77 tracks × 26 sectors × 128 bytes = 256,256 bytes), the same as the 680b. The FIF cannot read an unformatted sector (93); a sector comes into existence when it is written or its track is formatted (function 3).
-- **Booting:** the 「CP/M 1.31」 button inserts an IMSAI CP/M 1.31 disk in drive A, powers on, and reproduces the FIF boot (it reads the boot sector to address 0 and runs it). `DIR` lists PIP, STAT, ED, DDT, ASM and others, and `PIP COPY.COM=STAT.COM` writes to the disk.
-- **New blank disks:** in the 「ディスク」 (Disk) menu, 「ドライブ X に新規の空ディスク(フォーマット済み)を作成…」 (create a new formatted blank disk in drive X) creates a formatted blank disk on the IMSAI (only the CP/M directory on track 2 is filled with E5; the rest is 0). This is because IMSAI CP/M 1.31 has no way to format a disk. The user guide (section 6.6, SYSGEN) assumes new disks are used without initializing them, and a test confirmed that running IMDOS's `FORMAT.COM` (IMSAI FORMATTER-INITIALIZER 2.05) on CP/M 1.31 stops with "INCOMPATIBLE VERSION OF SYSTEM / FORMAT ABORTED". With such a disk in drive B, `B:`, `DIR` (`NOT FOUND` = empty), `A:PIP B:STAT2.COM=A:STAT.COM`, `DIR` and `STAT2` were checked on screen.
-- **Disk images:** the list in the Settings window has 10 disks for the IMSAI 8080, each with a link to where it comes from. CP/M 1.31 (16K) is from deramp.com; the others are `.tgz` files on a z80pack mirror ([icl1900.co.uk/unix4fun/z80pack/ftp/imsai/](https://www.icl1900.co.uk/unix4fun/z80pack/ftp/imsai/readme.txt)): CP/M 1.33 (52K, restored by Udo Munk), CP/M 2.2 (54K), Fig-Forth (on CP/M 2.2), IMDOS 2.02 (54K), IMDOS 2.05 rev.0 (54K, two disks), IMDOS 2.05 rev.1 (16K, the Maslin and Peters versions), and IMDOS's `FORMAT.COM`. A `.tgz` can be passed to 「ファイル・フォルダを取り込み…」 (import files/folders) without unpacking it: the app unpacks it into a temporary folder, identifies the `.dsk` files inside by name, and deletes the temporary folder after importing. The 「ほかの OS で起動」 (boot another OS) menu lists only the system disks you have imported.
-- **Confirmed to boot:** CP/M 1.31 (16K), CP/M 1.33 (52K), CP/M 2.2 (54K), Fig-Forth, IMDOS 2.02, IMDOS 2.05 rev.0 and IMDOS 2.05 rev.1 (both versions) boot through the FIF boot and `DIR` works (automated test `testOtherIMSAISystemDisksBoot`; only CP/M 1.31 was also checked on screen in the app). UCSD p-System IV (`ucsd-iv.tgz`) produces no output after booting; the cause has not been investigated.
-
-Checked on screen: booting ("IMSAI 16K CP/M VERS 1.31" and `A>`), `DIR`, and entering a program on the panel (address switches, EXAMINE, data switches, DEPOSIT, DEPOSIT NEXT, RUN, programmed-output LEDs, stopping at HLT). The automated tests (`IMSAITests`) cover booting, `DIR`, copying with `PIP`, `STAT`, FIF commands (unformatted sectors, formatting a track, writing and reading, error codes, write protect), port FF, the SIO-2, and EXAMINE and DEPOSIT.
-
-Not yet confirmed: the INTA and HOLD LEDs on the IMSAI panel are always off (interrupt acknowledge and HOLD are not implemented). FIF error codes other than A1–A3 and C1–C6 (91, 92, 94–97) are not reproduced. IMDOS, IMSAI BASIC and the VIO (video) are out of scope. SIO-2 baud rate and mode settings are read and ignored.
 
 ## Importing ROMs and disk images
 
@@ -131,7 +104,17 @@ The source disk defaults to the imported CP/M 2.2b. If you turn off 「もとの
 
 Tests that need library files are skipped automatically when the files are missing (`swift test`).
 
-## ROMs
+## Altair 8800 (Intel 8080)
+
+Choose 「Altair 8800」 in the machine selector.
+
+### Usage
+
+- 「デモを読み込む」 (load demo) → places HELLO / ECHO at 0000; run it with RUN/STOP
+- Entering by hand: set the address switches and EXAMINE, then set the data and repeat DEPOSIT NEXT
+- For BASIC and other programs, load your own image (`.bin` goes to 0000, `.hex` goes to the record addresses) with 「ファイルを読み込む」 (load file), then RESET → RUN
+
+### ROMs (Altair BASIC 8K)
 
 Where to get the ROM files (`8kBas_e0/e8/f0/f8.bin`, `88dskrom.bin`) is in the "Where to get them" table above.
 
@@ -139,15 +122,7 @@ The 「BASIC 8K」 button installs it at E000h and runs it (32 KB of RAM).
 The BASIC ROM uses the serial port at ports 00h/01h (2SIO style), so the simulator connects both 00h/01h and 10h/11h to the same terminal.
 `88dskrom.bin` is for booting from disk (FF00h) and is used to boot CP/M and Zork.
 
-## Speed options
-
-Switch them in the menus above the terminal.
-
-- CPU: 「実機の速度」 (real speed: runs in step with real time and catches up when it falls behind; delays over 0.1 s are dropped) / 「最速」 (as fast as possible)
-- Serial: 「制限なし」 (unlimited) / 9600 / 1200 / 300 / 110 baud (Teletype, 11 bits per character).
-  The transmit-ready bit (bit 1 of the status) goes low for the time one character takes, so programs that check the status before output, such as BASIC, slow down
-
-## Disks and CP/M
+### Disks and CP/M
 
 - An 88-DCDD floppy disk controller (ports 08h–0Ah, drives A–P) is implemented. Rotational delay is not modeled in time; it is a simple model where "each read of the sector register advances one sector"
 - Disk images are `.dsk` files of 77 tracks × 32 sectors × 137 bytes (337,568 bytes) or more. Distributed `.dsk` files have padding at the end (CP/M 2.2 is 337,664 bytes)
@@ -156,17 +131,17 @@ Switch them in the menus above the terminal.
 - 「CP/M 3 で起動」 (boot CP/M 3): mounts `cpm3_v1.0_56K_disk1.dsk` from the library in drive A and `cpm3_v1.0_56k_disk2.dsk` in drive B, and boots. Working copies are handled the same way as for CP/M 2.2
 - Checked: booting CP/M 2.2b, `DIR`, copying files with `PIP` (writing to disk), and `PRINT 2+3` in `MBASIC` (BASIC-80)
 
-## Disk drive view
+### Disk drive view
 
 Drives A and B of the 88-DCDD are drawn below the panel (colored after photos of the blue cabinet stacked under an Altair 8800). Clicking a door switches between inserting a disk (choosing a file) and ejecting it. While a disk is in, the slot shows a sleeve and the file name; the IN USE lamp shows access, and TRK shows the head position.
 
 CP/M 3 checks: boots from `CP/M V3.0 Loader` through `CP/M 3 BIOS v1.0 for Altair 8" Floppy`, `DIR`, writing to drive B with `PIP`, and `PRINT 2+3` in `MBASIC` (BASIC-80 Rev. 5.21).
 
-## Zork
+### Zork
 
 The 「Zork」 button boots a Burcon 56K CP/M 2.2 disk (`zork.dsk`) from drive A. At `A>`, type `ZORK1` or `ZORK2`. The disk has `ZORK3.COM` but not its data file, so it stops at `Load Game Disk`.
 
-## 8080 instruction tests
+### 8080 instruction tests
 
 CP/M test programs imported into `cpu_tests/` in the library are run in a harness that emulates only the BDOS call (0005h) (`CPUExerciserTests`).
 
@@ -183,7 +158,7 @@ CP/M test programs imported into `cpu_tests/` in the library are run in a harnes
 RUN_8080EXM=1 swift test -c release -Xswiftc -enable-testing --filter CPUExerciserTests/test8080EXM
 ```
 
-## How HLT behaves
+### How HLT behaves
 
 It follows the Intel 8080 data sheet (pages 2-13 to 2-14, Table 2-1).
 
@@ -193,34 +168,12 @@ It follows the Intel 8080 data sheet (pages 2-13 to 2-14, Table 2-1).
 - The real panel has no switch that raises an interrupt, so it is exposed as an internal function (`AltairMachine.requestInterrupt`) for tests. HOLD is not implemented
 - The data LEDs keep the value of the HLT instruction (76h). On the real machine the data bus floats partway through the M2 cycle, so how the panel looks there has not been confirmed
 
-## Delete key
-
-What the terminal's delete key sends depends on the program being run (it can also be changed with the terminal's 「削除キー」 (delete key) setting).
-
-| Setting | Code | Used for |
-|---|---|---|
-| BS (^H) | 08h | CP/M (default). Erases the character on screen with BS-SP-BS |
-| DEL (7F) | 7Fh | CP/M echoes the deleted character as is (meant for hard-copy terminals). Altair BASIC shows it like `\9\` |
-| _ (Altair BASIC) | 5Fh | Altair BASIC (chosen automatically when 「BASIC 8K」 starts). BASIC deletes the character and shows `_` |
-
-The Mac's delete key does not match SwiftUI's `.delete` and arrives as the character U+007F, so it is detected by character. fn + delete (forward delete) sends 7Fh, which corresponds to the ADM-3A's RUB OUT.
-
-## Hex input
+### Hex input
 
 There are two input fields below the toolbar.
 
 - Switches: sets the address switches (A15–A0) in hex (for example `FF00`). When you move the switches by hand, the field follows
 - Write: writes to RAM in the form `address: bytes` (for example `0000: 3E 01 76`). It follows the same steps as EXAMINE → DEPOSIT → DEPOSIT NEXT … on the panel, and after writing, the start address is left EXAMINEd. While running, it STOPs before writing. Addresses that are not RAM (ROM or unpopulated areas) are not written
-
-## Terminal (80 columns × 24 lines)
-
-The terminal has an 80 × 24 screen buffer and understands the following controls.
-
-- Control characters: CR, LF (scrolls at the bottom line), BS (only moves the cursor back; the character is not erased; CP/M's BS-SP-BS erases it), TAB. DEL (7Fh) and others are ignored
-- ANSI (VT100 family): `ESC [ H` `f` (cursor position), `A B C D` (cursor movement), `J` (erase screen), `K` (erase line), `L M` (insert/delete line). `m` (character attributes) is ignored
-- ADM-3A: `ESC = row column` (cursor position), 1Eh (home), 1Ah (clear screen)
-
-This was needed because WM (WORDMASTER, a screen editor on the CP/M 2.2 disk) controls the screen with ANSI sequences.
 
 ## Altair 680b (Motorola 6800)
 
@@ -238,7 +191,7 @@ Checked: the monitor, loading and starting BASIC, `PRINT 6*7` (42), a FOR loop, 
 
 Clock: 500 kHz (2 microseconds per clock), confirmed in the 680b Theory of Operation (a 2 MHz crystal divided by 4). Not yet confirmed: the differences between the 680 and the 680b, details of the panel's colors and layout, and a standard CPU test (none found).
 
-## 6800 functional test program
+### 6800 functional test program
 
 `Tools/gen6800_functional_test.py` generates a 6800 machine-code program that executes every MC6800 opcode (196, excluding WAI) in every addressing mode and checks the results.
 
@@ -252,7 +205,7 @@ Confirmed: the CPU matches in every case. Ten kinds of bugs were planted in the 
 
 Limits: the reference model and the CPU were written by the same person (me), so a misunderstanding shared by both cannot be found. Nothing was compared against real hardware or another emulator (the program itself is 6800 machine code, so it can be run elsewhere). Invalid BCD input to DAA, the "undefined" handling of V (DAA masks V), and WAI and interrupts are out of scope.
 
-## Altair 680b disks (68-UIO and FD3712)
+### Disks (68-UIO and FD3712)
 
 - The 680b, like the 8800, has a disk controller and a view of drives A–D (two drives per cabinet × 2 stacked). The mount/unmount mechanism (`DiskSubsystem`) and the drive drawing are shared
 - 68-UIO board: a second ACIA at F006/F007 (no terminal attached), and two MC6821 PIAs at F008–F00F (`PIA6821`). The PIA registers are wired with the lowest address bit inverted (F008 = control A, F009 = data A, F00A = control B, F00B = data B)
@@ -260,11 +213,74 @@ Limits: the reference model and the CPU were written by the same person (me), so
 - Disks are IBM 3740 format (77 tracks × 26 sectors × 128 bytes = 256,256 bytes). There is no rotational position; each command is approximated by the time it takes (busy)
 - Checked: a test (`FD3712Tests`) that copies into Swift the register operations used by the FLEX boot PROM (BOOT.ASM) and disk driver (DSKDRV.ASM) confirms reading, seeking, writing, two drives, an unconnected drive, write protect and busy time
 
-Right after the app starts, both the 8800 and the 680b are powered off (all lamps out). Each machine has its own power, so switching machine tabs leaves the other machine's power and terminal screen as they were. Start the 8800 with the POWER switch on the panel or with a boot button such as 「CP/M 2.2」. After the POWER switch, you operate the RUN switch yourself, as on the real machine. The boot buttons (「BASIC 8K」, 「CP/M 2.2」, 「CP/M 3」, 「Zork」) power on and run from the boot address. When the 680b is powered on, the PROM monitor starts and shows the "." prompt.
-
 - Checked with the real boot PROM and the distributed disk images: 「FLEX 3.0」 boots `6800 FLEX V3.0`, asks `DATE (MM,DD,YY)?`, and `CAT` lists the files (SAVE, PCGET, …, BASIC, CC, WC and others, 493 sectors left). 「CP/68」 boots `HEMENWAY ASSOCIATES CP/68-1.0`, and `DIR` lists INIT, LINK, PIP, CP68.SYS and others. On FLEX, the `BASIC.CMD` on the disk (59 sectors) also runs (typing `BASIC` gives `READY`, `PRINT 2+3` gives 5, and a FOR loop gives `1  4  9  16  25`). In FLEX BASIC, `SAVE "SQUARES"` saves to disk, and after `NEW`, `LOAD "SQUARES"` reads it back (`SQUARES.BAS` appears in the FLEX directory). Disk writes are written back automatically to the working copy (`~/Library/Application Support/AltairSim/disks/`) about 1.5 seconds after disk activity stops, so they remain after the app is closed. On CP/68, `PIP COPY1.SYS=CP68.SYS` confirmed writing to disk, and the written file could be read back with `COPY2.SYS=COPY1.SYS` (once started, PIP stays at its `PIP-` prompt; how to leave it is not documented and has not been confirmed). Tests confirm that a SAVEd file remains in `CAT` and can be `LOAD`ed after rebooting on another machine instance. The FD3712 wait times (about 6.4 ms for a read or write, 1 ms per track for a seek) are approximations from the data sheet and have not been compared with measurements on real hardware. On the real 680b the power switch is on the back panel (Operator's Manual p.14), so it is not on the front panel; it is switched with 「電源(背面)」 (power, rear) in the button column on the left of the window. OFF turns off all lamps and stops the CPU; ON lights the AC lamp and starts the PROM monitor. Both use the boot PROM (`altair680/boot/BOOT.S19`), SWIMON, the 68-UIO, 48 KB of RAM and the disk in drive A, and boot with the monitor's `J FC00`
 - In the distributed FLEX 3.0 image, the boot loader (bytes 5 and 6 of physical sector 1 on track 0) does not contain the location of the system file (FLEX3.SYS) (the state before LINK.CMD is run). As is, the loader tries to read track 0 sector 0 and keeps restarting the boot. The 「FLEX 3.0」 button does the same thing as LINK on the working copy (`FLEXImage.linkBootLoader`, which finds FLEX3.SYS at track 17, sector 12 in the directory and writes it) before booting. The original image is not changed
 - Drive labels and the handling of working copies (`~/Library/Application Support/AltairSim/disks/`) are the same as for the 8800 disks
+
+## IMSAI 8080
+
+Choose 「IMSAI 8080」 in the machine selector to run the IMSAI 8080. The 8080 and the S-100 bus are the same as on the Altair 8800; the panel, the serial board and the floppy are different. The CPU and memory are shared with the Altair 8800.
+
+- **Front panel (CP-A):** drawn from photos of the real machine and the CP-A manual. Top left: 8 programmed-output LEDs, 8 status-byte LEDs (MEMR, INP, M1, OUT, HLTA, STACK, WO, INTA), address LEDs A15–A8 and 8 paddles. Center: data bus LEDs, address LEDs A7–A0 and 8 paddles (which also serve as data switches). Right: the INTERRUPT ENABLED, RUN, WAIT and HOLD LEDs, and 6 control paddles (EXAMINE/EXAMINE NEXT, DEPOSIT/DEPOSIT NEXT, RESET/EXT CLR, RUN/STOP, SINGLE STEP, PWR ON/OFF). Each paddle does one thing on its upper half and another on its lower half, and they are colored blue and red.
+- **I/O ports:** `02/03` and `04/05` are channels A and B of the SIO-2 (data/status, with the same bit layout as the 8251), `FD` is the FIF floppy, and `FF` is input = upper address switches (A8–A15) and output = programmed-output LEDs (lit when the bit is 0).
+- **FIF floppy:** on the real IMSAI floppy interface, an 8080 on the board runs firmware (`fifware.asm`) that reads a 7-byte command string from memory and writes the result back to a status byte. This simulator does not run that firmware's 8080. It reproduces the behavior the host sees: checking the command string and the error codes C1–C6, A1–A3 and 93, reading, writing, formatting a track, and an approximation of the time each takes. Disks are IBM 3740 format (77 tracks × 26 sectors × 128 bytes = 256,256 bytes), the same as the 680b. The FIF cannot read an unformatted sector (93); a sector comes into existence when it is written or its track is formatted (function 3).
+- **Booting:** the 「CP/M 1.31」 button inserts an IMSAI CP/M 1.31 disk in drive A, powers on, and reproduces the FIF boot (it reads the boot sector to address 0 and runs it). `DIR` lists PIP, STAT, ED, DDT, ASM and others, and `PIP COPY.COM=STAT.COM` writes to the disk.
+- **New blank disks:** in the 「ディスク」 (Disk) menu, 「ドライブ X に新規の空ディスク(フォーマット済み)を作成…」 (create a new formatted blank disk in drive X) creates a formatted blank disk on the IMSAI (only the CP/M directory on track 2 is filled with E5; the rest is 0). This is because IMSAI CP/M 1.31 has no way to format a disk. The user guide (section 6.6, SYSGEN) assumes new disks are used without initializing them, and a test confirmed that running IMDOS's `FORMAT.COM` (IMSAI FORMATTER-INITIALIZER 2.05) on CP/M 1.31 stops with "INCOMPATIBLE VERSION OF SYSTEM / FORMAT ABORTED". With such a disk in drive B, `B:`, `DIR` (`NOT FOUND` = empty), `A:PIP B:STAT2.COM=A:STAT.COM`, `DIR` and `STAT2` were checked on screen.
+- **Disk images:** the list in the Settings window has 10 disks for the IMSAI 8080, each with a link to where it comes from. CP/M 1.31 (16K) is from deramp.com; the others are `.tgz` files on a z80pack mirror ([icl1900.co.uk/unix4fun/z80pack/ftp/imsai/](https://www.icl1900.co.uk/unix4fun/z80pack/ftp/imsai/readme.txt)): CP/M 1.33 (52K, restored by Udo Munk), CP/M 2.2 (54K), Fig-Forth (on CP/M 2.2), IMDOS 2.02 (54K), IMDOS 2.05 rev.0 (54K, two disks), IMDOS 2.05 rev.1 (16K, the Maslin and Peters versions), and IMDOS's `FORMAT.COM`. A `.tgz` can be passed to 「ファイル・フォルダを取り込み…」 (import files/folders) without unpacking it: the app unpacks it into a temporary folder, identifies the `.dsk` files inside by name, and deletes the temporary folder after importing. The 「ほかの OS で起動」 (boot another OS) menu lists only the system disks you have imported.
+- **Confirmed to boot:** CP/M 1.31 (16K), CP/M 1.33 (52K), CP/M 2.2 (54K), Fig-Forth, IMDOS 2.02, IMDOS 2.05 rev.0 and IMDOS 2.05 rev.1 (both versions) boot through the FIF boot and `DIR` works (automated test `testOtherIMSAISystemDisksBoot`; only CP/M 1.31 was also checked on screen in the app). UCSD p-System IV (`ucsd-iv.tgz`) produces no output after booting; the cause has not been investigated.
+
+Checked on screen: booting ("IMSAI 16K CP/M VERS 1.31" and `A>`), `DIR`, and entering a program on the panel (address switches, EXAMINE, data switches, DEPOSIT, DEPOSIT NEXT, RUN, programmed-output LEDs, stopping at HLT). The automated tests (`IMSAITests`) cover booting, `DIR`, copying with `PIP`, `STAT`, FIF commands (unformatted sectors, formatting a track, writing and reading, error codes, write protect), port FF, the SIO-2, and EXAMINE and DEPOSIT.
+
+Not yet confirmed: the INTA and HOLD LEDs on the IMSAI panel are always off (interrupt acknowledge and HOLD are not implemented). FIF error codes other than A1–A3 and C1–C6 (91, 92, 94–97) are not reproduced. IMDOS, IMSAI BASIC and the VIO (video) are out of scope. SIO-2 baud rate and mode settings are read and ignored.
+
+## Shared features
+
+The terminal and the settings above it (CPU speed, serial speed, delete key) are shared by all three machines. Each machine keeps its own terminal screen.
+
+### Power and switching machines
+
+Right after the app starts, both the 8800 and the 680b are powered off (all lamps out). Each machine has its own power, so switching machine tabs leaves the other machine's power and terminal screen as they were. Start the 8800 with the POWER switch on the panel or with a boot button such as 「CP/M 2.2」. After the POWER switch, you operate the RUN switch yourself, as on the real machine. The boot buttons (「BASIC 8K」, 「CP/M 2.2」, 「CP/M 3」, 「Zork」) power on and run from the boot address. When the 680b is powered on, the PROM monitor starts and shows the "." prompt.
+
+### Terminal (80 columns × 24 lines)
+
+The terminal has an 80 × 24 screen buffer and understands the following controls.
+
+- Control characters: CR, LF (scrolls at the bottom line), BS (only moves the cursor back; the character is not erased; CP/M's BS-SP-BS erases it), TAB. DEL (7Fh) and others are ignored
+- ANSI (VT100 family): `ESC [ H` `f` (cursor position), `A B C D` (cursor movement), `J` (erase screen), `K` (erase line), `L M` (insert/delete line). `m` (character attributes) is ignored
+- ADM-3A: `ESC = row column` (cursor position), 1Eh (home), 1Ah (clear screen)
+
+This was needed because WM (WORDMASTER, a screen editor on the CP/M 2.2 disk) controls the screen with ANSI sequences.
+
+### Delete key
+
+What the terminal's delete key sends depends on the program being run (it can also be changed with the terminal's 「削除キー」 (delete key) setting).
+
+| Setting | Code | Used for |
+|---|---|---|
+| BS (^H) | 08h | CP/M (default). Erases the character on screen with BS-SP-BS |
+| DEL (7F) | 7Fh | CP/M echoes the deleted character as is (meant for hard-copy terminals). Altair BASIC shows it like `\9\` |
+| _ (Altair BASIC) | 5Fh | Altair BASIC (chosen automatically when 「BASIC 8K」 starts). BASIC deletes the character and shows `_` |
+
+The Mac's delete key does not match SwiftUI's `.delete` and arrives as the character U+007F, so it is detected by character. fn + delete (forward delete) sends 7Fh, which corresponds to the ADM-3A's RUB OUT.
+
+### Speed options
+
+Switch them in the menus above the terminal.
+
+- CPU: 「実機の速度」 (real speed: runs in step with real time and catches up when it falls behind; delays over 0.1 s are dropped) / 「最速」 (as fast as possible)
+- Serial: 「制限なし」 (unlimited) / 9600 / 1200 / 300 / 110 baud (Teletype, 11 bits per character).
+  The transmit-ready bit (bit 1 of the status) goes low for the time one character takes, so programs that check the status before output, such as BASIC, slow down
+
+## Layout
+
+- `Sources/AltairCore`: the machines and their devices (no UI code)
+  - Altair 8800: 8080 CPU (`CPU.swift`; every instruction, with clock counts), the machine (`Machine.swift`; 64 KB of memory, a 2SIO-style serial port at ports 10h/11h, sense switches at port FFh), the 88-DCDD (`DiskController.swift`)
+  - Altair 680b: MC6800 CPU (`CPU6800.swift`), the machine (`Altair680Machine.swift`), the 68-UIO's PIAs (`PIA6821.swift`), the FD3712 (`FD3712Controller.swift`), FLEX image helpers (`FLEXImage.swift`)
+  - IMSAI 8080: the machine and the SIO-2 (`IMSAIMachine.swift`), the FIF (`FIFController.swift`)
+  - Shared: Intel HEX and S-record loaders (`HexLoader.swift`, `S19Loader.swift`), the 80 × 24 terminal (`TerminalScreen.swift`), reading and writing CP/M 2.2 disks (`CPMDisk.swift`), the ROM and disk library (`AssetLibrary.swift`, `UserLibrary.swift`), built-in demos (`Programs.swift`)
+- `Sources/AltairSim`: the SwiftUI app
+  - Front panels (`FrontPanelView.swift` for the 8800, `FrontPanel680View.swift`, `FrontPanelIMSAIView.swift`), disk drives (`DiskDriveView.swift`), terminal (`TerminalView.swift`)
+  - Settings window (`LibrarySettingsView.swift`, `UserItemEditor.swift`, `CPMDiskBuilder.swift`), app state and actions (`SimulatorModel.swift`, `AltairSimApp.swift`)
 
 ## License
 

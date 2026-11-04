@@ -1,8 +1,8 @@
-# Altair 8800 Simulator (Swift / macOS)
+# AltairSim
 
 [English](README.md) | **日本語** | [Web サイト](https://masakai.github.io/AltairSim/)
 
-Intel 8080 搭載の Altair 8800(1975年)のシミュレータ。
+Altair 8800(1975年)、Altair 680b、IMSAI 8080 のシミュレータ(Swift / macOS)。
 
 [![AltairSim 紹介動画(23秒、ナレーション付き)](docs/media/altairsim.jpg)](docs/media/altairsim.mp4)
 
@@ -28,33 +28,6 @@ Tools/make_app.sh --install    # 作成後に ~/Applications へコピーする
 `build/AltairSim.app` ができます(Dock のアイコンは `Tools/make_icon.py` で描いています)。署名はアドホック(自分のマシンで使う前提)で、公証はしていません。他のマシンへ配る場合は、Developer ID での署名と公証が別途必要です。Bundle ID は環境変数 `BUNDLE_ID`(既定 `local.altairsim`)、バージョンは `VERSION`(既定 1.0)で変えられます。
 
 ROM・ディスクイメージはアプリに含まれていないので、初回は設定(⌘,)から取り込みます(下の「ROM・ディスクイメージの取り込み」)。取り込んだファイルは `~/Library/Application Support/AltairSim/library/` にあり、`swift run` で起動した場合と共通です。
-
-## 構成
-
-- `Sources/AltairCore`: 8080 CPU(全命令、クロック数つき)、64KB メモリ、2SIO 相当のシリアル(ポート 10h/11h)、センススイッチ(ポート FFh)、Intel HEX ローダー
-- `Sources/AltairSim`: SwiftUI のフロントパネル(A0-A15 スイッチ、アドレス/データ LED、EXAMINE/DEPOSIT/RUN/STEP/RESET)と端末
-
-## 使い方
-
-- 「デモを読み込む」→ HELLO / ECHO を 0000 に配置、RUN/STOP で実行
-- 手入力: アドレススイッチを設定して EXAMINE、データを設定して DEPOSIT NEXT を繰り返す
-- BASIC 等は手元のイメージ(`.bin` は 0000 に配置、`.hex` はレコードのアドレスに配置)を「ファイルを読み込む」で読み込み、RESET → RUN
-
-## IMSAI 8080
-
-機種切り替えの「IMSAI 8080」で、IMSAI 8080 を動かします(8080 と S-100 バスは Altair 8800 と同じで、パネル、シリアルボード、フロッピーが違います)。CPU とメモリは Altair 8800 と共通です。
-
-- **フロントパネル(CP-A):** 実機の写真と CP-A のマニュアルをもとに描いています。左上にプログラム出力 LED(8)、ステータスバイト LED(MEMR、INP、M1、OUT、HLTA、STACK、WO、INTA の 8)、アドレス LED A15〜A8 とパドル 8 個。中央にデータバス LED、アドレス LED A7〜A0 とパドル 8 個(データスイッチも兼ねる)。右に INTERRUPT ENABLED、RUN、WAIT、HOLD の LED と、制御用のパドル 6 個(EXAMINE/EXAMINE NEXT、DEPOSIT/DEPOSIT NEXT、RESET/EXT CLR、RUN/STOP、SINGLE STEP、PWR ON/OFF)です。パドルは上半分と下半分で動作が決まり、青と赤で色分けされています。
-- **I/O ポート:** `02/03` と `04/05` が SIO-2 のチャンネル A と B(データ/ステータス、8251 と同じビット配置)、`FD` が FIF フロッピー、`FF` が入力 = 上位アドレススイッチ(A8〜A15)・出力 = プログラム出力 LED(反転して点灯)です。
-- **FIF フロッピー:** IMSAI のフロッピーインタフェースは、ボード上の 8080 がファームウェア(`fifware.asm`)を実行して、メモリ上の 7 バイトのコマンド列を読み、結果をステータスバイトに書き戻します。このシミュレータは、ファームウェアの 8080 は動かさずに、ホストから見える動作(コマンド列の検査とエラーコード C1〜C6・A1〜A3・93、読み出し、書き込み、トラックのフォーマット、所要時間の近似)を再現しています。ディスクは IBM 3740 形式(77 トラック × 26 セクタ × 128 バイト = 256,256 バイト)で、680b と同じです。FIF は、未フォーマットのセクタを読めず(93)、書き込みかトラックのフォーマット(機能 3)で存在するようになります。
-- **起動:** 「CP/M 1.31」ボタンは、ドライブ A に IMSAI CP/M 1.31 のディスクを入れて電源を入れ、FIF のブート(起動セクタをメモリの 0 番地へ読んで実行)を再現します。`DIR` で PIP、STAT、ED、DDT、ASM などが出て、`PIP COPY.COM=STAT.COM` でディスクに書き込めます。
-- **新規の空ディスク:** 「ディスク」メニューの「ドライブ X に新規の空ディスク(フォーマット済み)を作成…」は、IMSAI ではフォーマット済みの空ディスクを作ります(トラック 2 の CP/M ディレクトリだけ E5 で埋め、残りは 0)。IMSAI CP/M 1.31 には、ディスクをフォーマットする機能がないからです。ユーザーガイド(6.6 SYSGEN の項)に、新しいディスクは初期化なしで使う前提だとあり、IMDOS 付属の `FORMAT.COM`(IMSAI FORMATTER-INITIALIZER 2.05)を CP/M 1.31 で動かすと「INCOMPATIBLE VERSION OF SYSTEM / FORMAT ABORTED」で中止することを、テストで確かめました。ドライブ B に入れて `B:`、`DIR`(`NOT FOUND` = 空)、`A:PIP B:STAT2.COM=A:STAT.COM`、`DIR`、`STAT2` まで、画面で確かめています。
-- **ディスクイメージ:** 設定画面の一覧に、IMSAI 8080 用のディスクが 10 件あります(取得元のリンクつき)。CP/M 1.31(16K)は deramp.com、そのほかは z80pack のミラー([icl1900.co.uk/unix4fun/z80pack/ftp/imsai/](https://www.icl1900.co.uk/unix4fun/z80pack/ftp/imsai/readme.txt))の `.tgz` です。CP/M 1.33(52K、Udo Munk による復元)、CP/M 2.2(54K)、Fig-Forth(CP/M 2.2 上)、IMDOS 2.02(54K)、IMDOS 2.05 rev.0(54K、ディスク 2 枚)、IMDOS 2.05 rev.1(16K、Maslin 版と Peters 版)、IMDOS の `FORMAT.COM` です。`.tgz` は展開せずに、そのまま「ファイル・フォルダを取り込み…」へ渡せます(アプリが一時フォルダへ展開し、中の `.dsk` を名前で判別して、取り込み後に一時フォルダを消します)。「ほかの OS で起動」メニューには、取り込んだシステムディスクだけが選べます。
-- **起動を確かめたもの:** CP/M 1.31(16K)、CP/M 1.33(52K)、CP/M 2.2(54K)、Fig-Forth、IMDOS 2.02、IMDOS 2.05 rev.0、IMDOS 2.05 rev.1(2 種)は、FIF のブートで起動し、`DIR` が動くことを確かめました(自動テスト `testOtherIMSAISystemDisksBoot`。CP/M 1.31 だけは、アプリの画面でも確認しています)。UCSD p-System IV(`ucsd-iv.tgz`)は、起動しても出力がなく、原因は調べていません。
-
-画面で確認した範囲は、起動(「IMSAI 16K CP/M VERS 1.31」と `A>`)、`DIR`、パネルの手入力(アドレススイッチ、EXAMINE、データスイッチ、DEPOSIT、DEPOSIT NEXT、RUN、プログラム出力 LED、HLT での停止)です。自動テスト(`IMSAITests`)では、起動、`DIR`、`PIP` でのコピー、`STAT`、FIF のコマンド(未フォーマットのセクタ、トラックのフォーマット、書き込みと読み出し、エラーコード、書き込み禁止)、ポート FF、SIO-2、EXAMINE と DEPOSIT を確かめています。
-
-未確認のこと: IMSAI のパネルの INTA と HOLD の LED は常に消灯です(割り込み応答と HOLD は未実装)。FIF のファームウェアが返す A1〜A3 と C1〜C6 以外のエラーコード(91、92、94〜97)は再現していません。IMDOS、IMSAI の BASIC、VIO(ビデオ)は対象外です。SIO-2 のボーレートやモード設定は読み捨てています。
 
 ## ROM・ディスクイメージの取り込み
 
@@ -131,7 +104,17 @@ altairclone.com で配られているファイルの一覧は [docs/altairclone-
 
 テストは、ライブラリのファイルがなければ該当のものだけ自動でスキップします(`swift test`)。
 
-## ROM
+## Altair 8800(Intel 8080)
+
+機種の切り替えで「Altair 8800」を選びます。
+
+### 使い方
+
+- 「デモを読み込む」→ HELLO / ECHO を 0000 に配置、RUN/STOP で実行
+- 手入力: アドレススイッチを設定して EXAMINE、データを設定して DEPOSIT NEXT を繰り返す
+- BASIC 等は手元のイメージ(`.bin` は 0000 に配置、`.hex` はレコードのアドレスに配置)を「ファイルを読み込む」で読み込み、RESET → RUN
+
+### ROM(Altair BASIC 8K)
 
 ROM ファイル(`8kBas_e0/e8/f0/f8.bin`、`88dskrom.bin`)の入手先は、上の「入手先」の表にあります。
 
@@ -139,15 +122,7 @@ ROM ファイル(`8kBas_e0/e8/f0/f8.bin`、`88dskrom.bin`)の入手先は、上�
 BASIC ROM はシリアルをポート 00h/01h(2SIO 形式)で使うため、シミュレータは 00h/01h と 10h/11h の両方を同じ端末に接続しています。
 `88dskrom.bin` はディスクブート(FF00h)用で、CP/M と Zork の起動に使います。
 
-## 速度オプション
-
-端末の上のメニューで切り替えます。
-
-- CPU: `実機の速度`(実時間に合わせて実行し、遅れた分は取り戻す。0.1 秒を超える遅れは切り捨て)/ `最速`
-- シリアル: `制限なし` / 9600 / 1200 / 300 / 110 ボー(テレタイプ、11 ビット/文字)。
-  送信可ビット(ステータスの bit1)が文字の所要時間だけ下がり、BASIC などステータスを見て出力するプログラムが遅くなる
-
-## ディスクと CP/M
+### ディスクと CP/M
 
 - 88-DCDD フロッピーディスクコントローラ(ポート 08h-0Ah、ドライブ A〜P)を実装しています。回転待ちは時間ではなく「セクタレジスタを読むたびに 1 セクタ進む」簡易モデルです
 - ディスクイメージは 77 トラック × 32 セクタ × 137 バイト(337,568 バイト)以上の .dsk です。配布されている .dsk は末尾に余白があります(CP/M 2.2 は 337,664 バイト)
@@ -156,17 +131,17 @@ BASIC ROM はシリアルをポート 00h/01h(2SIO 形式)で使うため、シ�
 - 「CP/M 3 で起動」: ライブラリの `cpm3_v1.0_56K_disk1.dsk` をドライブ A、`cpm3_v1.0_56k_disk2.dsk` をドライブ B に装着して起動します。作業用コピーの扱いは CP/M 2.2 と同じです
 - 動作確認: CP/M 2.2b の起動、`DIR`、`PIP` によるファイルコピー(ディスク書き込み)、`MBASIC`(BASIC-80)の `PRINT 2+3`
 
-## ディスクドライブ画面
+### ディスクドライブ画面
 
 パネルの下に 88-DCDD のドライブ A・B を描いています(Altair 8800 の下に積まれる青い筐体の写真をもとにした配色)。ドアをクリックするとディスクの装着(ファイル選択)と取り出しを切り替えます。装着中はスロットにスリーブとファイル名、アクセス中は IN USE ランプ、ヘッド位置は TRK で表示します。
 
 CP/M 3 の動作確認: `CP/M V3.0 Loader` から `CP/M 3 BIOS v1.0 for Altair 8" Floppy` まで起動、`DIR`、`PIP` による B ドライブへの書き込み、`MBASIC`(BASIC-80 Rev. 5.21)の `PRINT 2+3`。
 
-## Zork
+### Zork
 
 「Zork」ボタンで Burcon 56K CP/M 2.2 のディスク(`zork.dsk`)をドライブ A から起動します。`A>` で `ZORK1` または `ZORK2` と入力します。このディスクには `ZORK3.COM` はありますがデータファイルがなく、`Load Game Disk` の表示で止まります。
 
-## 8080 命令テスト
+### 8080 命令テスト
 
 ライブラリの `cpu_tests/` に取り込んだ CP/M 用テストプログラムを、BDOS 呼び出し(0005h)だけを模擬するハーネスで実行します(`CPUExerciserTests`)。
 
@@ -183,7 +158,7 @@ CP/M 3 の動作確認: `CP/M V3.0 Loader` から `CP/M 3 BIOS v1.0 for Altair 8
 RUN_8080EXM=1 swift test -c release -Xswiftc -enable-testing --filter CPUExerciserTests/test8080EXM
 ```
 
-## HLT の動作
+### HLT の動作
 
 Intel 8080 データシート(2-13〜2-14 ページ、Table 2-1)に合わせています。
 
@@ -193,34 +168,12 @@ Intel 8080 データシート(2-13〜2-14 ページ、Table 2-1)に合わせて�
 - 割り込みを起こすスイッチは実機のパネルにないので、内部関数(`AltairMachine.requestInterrupt`)としてテストから使えるようにしています。HOLD は未実装です
 - データ LED は、HLT 命令の値(76h)のままです。実機では M2 サイクルの途中でデータバスがフローティングになるため、パネルでの見え方は確認していません
 
-## 削除キー
-
-端末の削除キーは、起動するプログラムに合わせて送るコードを切り替えます(端末の設定「削除キー」で変更もできます)。
-
-| 設定 | コード | 使い所 |
-|---|---|---|
-| BS(^H) | 08h | CP/M(既定)。「BS-SP-BS」で画面上の文字を消す |
-| DEL(7F) | 7Fh | CP/M は削除した文字をそのままエコーする(ハードコピー端末向け)。Altair BASIC は `\9\` のように表示する |
-| _(Altair BASIC) | 5Fh | Altair BASIC(「BASIC 8K」を起動すると自動で選ぶ)。BASIC は削除した上で `_` を表示する |
-
-Mac の delete キーは SwiftUI の `.delete` と一致せず、U+007F の文字として届くため、文字で判定しています。fn + delete(前方削除)は ADM-3A の RUB OUT にあたる 7Fh を送ります。
-
-## 16 進入力
+### 16 進入力
 
 ツールバーの下に 2 つの入力欄があります。
 
 - スイッチ: アドレススイッチ(A15〜A0)を 16 進で設定します(例: `FF00`)。スイッチを手で動かすと、欄の値も追従します
 - 書き込み: `番地: バイト列` の形(例: `0000: 3E 01 76`)で RAM に書き込みます。パネルの EXAMINE → DEPOSIT → DEPOSIT NEXT … と同じ手順で、書き込み後は先頭番地を EXAMINE した状態になります。実行中は STOP してから書き込みます。RAM でない番地(ROM や未実装領域)は書き込まれません
-
-## 端末(80 桁 × 24 行)
-
-端末は 80 × 24 の画面バッファを持ち、次の制御を解釈します。
-
-- 制御文字: CR、LF(最下行でスクロール)、BS(カーソルを戻すだけ。文字は消えない。CP/M の BS-SP-BS で消える)、TAB。DEL(7Fh)などは無視します
-- ANSI(VT100 系): `ESC [ H` `f`(位置指定)、`A B C D`(移動)、`J`(画面消去)、`K`(行消去)、`L M`(行挿入・削除)。`m`(文字属性)は無視します
-- ADM-3A: `ESC = 行 桁`(位置指定)、1Eh(ホーム)、1Ah(画面消去)
-
-WM(WORDMASTER、CP/M 2.2 ディスクに入っている画面エディタ)が ANSI のシーケンスで画面を制御するため、この解釈が必要でした。
 
 ## Altair 680b(Motorola 6800)
 
@@ -238,7 +191,7 @@ WM(WORDMASTER、CP/M 2.2 ディスクに入っている画面エディタ)が AN
 
 クロック: 500kHz(1 クロック 2 マイクロ秒)。680b の Theory of Operation で確認(2MHz の水晶を 4 分周)。未確認: 680 と 680b の差、パネルの色・配置の細部、定番の CPU テスト(見つかっていない)。
 
-## 6800 の機能テストプログラム
+### 6800 の機能テストプログラム
 
 `Tools/gen6800_functional_test.py` が、MC6800 の全オペコード(WAI を除く 196 個)・全アドレッシングモードを実行して結果を照合する、6800 の機械語のプログラムを作ります。
 
@@ -252,17 +205,81 @@ WM(WORDMASTER、CP/M 2.2 ディスクに入っている画面エディタ)が AN
 
 限界: 参照モデルと CPU の実装は同じ人(私)が書いたので、同じ思い違いは見つけられません。実機や別のエミュレータとの照合はしていません(プログラム自体は 6800 の機械語なので、別の環境でも動かせます)。DAA の不正な BCD 入力、V の「未定義」の扱い(DAA は V をマスク)、WAI と割り込みは対象外です。
 
-## Altair 680b のディスク(68-UIO と FD3712)
+### ディスク(68-UIO と FD3712)
 
 - 680b にも 8800 と同じ形で、ディスクコントローラとドライブ A〜D(2 台入り × 2 段)の画面があります。ディスクの装着・取り外しのしくみ(`DiskSubsystem`)と、ドライブの絵は共通です
 - 68-UIO ボード: F006/F007 に 2 つ目の ACIA(端末はつながっていない)、F008〜F00F に MC6821 の PIA が 2 つ(`PIA6821`)。PIA のレジスタは、アドレスの最下位ビットが反転した配線(F008 = 制御 A、F009 = データ A、F00A = 制御 B、F00B = データ B)
 - Pertec FD3712(`FD3712Controller`): PIA #1 のポート A がステータス/データの入力(論理が反転)、ポート B がコマンド出力、PIA #2 のポート B がデータ出力。実行のストローブは、データ出力側の CB2 とデータ入力側の CA2 のハンドシェイク(PIA の自動ハンドシェイク)の OR。コマンドは、リセット(81)、ドライブ/セクタ設定(21)、トラック設定(11)、シーク(09)、トラック 0 へ復帰(0D)、読み出し(03)、書き込み(05)、CRC 検証(07)、書き込みバッファ(31)、読み出しバッファ(41)、エラー消去(0B)
 - ディスクは IBM 3740 形式(77 トラック × 26 セクタ × 128 バイト = 256,256 バイト)。回転位置は持たず、コマンドごとの所要時間(ビジー)で近似しています
 - 動作確認: FLEX の起動 PROM(BOOT.ASM)とディスクドライバ(DSKDRV.ASM)が使うレジスタ操作の手順を、そのまま Swift で書き写したテスト(`FD3712Tests`)で、読み出し、シーク、書き込み、ドライブ 2 台、未接続、書き込み禁止、ビジーの時間を確認
-アプリを起動した直後は、8800 も 680b も電源オフです(全ランプ消灯)。電源は機種ごとに独立していて、機種タブを切り替えても、もう一方の電源や端末の画面はそのまま残ります。8800 は、パネルの POWER スイッチを入れるか、「CP/M 2.2」などの起動ボタンを押して始めます。POWER スイッチで始めたときは、RUN スイッチを実機と同じく自分で操作します。起動ボタン(「BASIC 8K」「CP/M 2.2」「CP/M 3」「Zork」)は、電源を入れて、起動番地から実行するところまで行います。680b は、電源を入れると PROM モニタが起動して「.」プロンプトが出ます。
 - 動作確認(本物の起動 PROM と、配布のディスクイメージで): 「FLEX 3.0」は `6800 FLEX V3.0` が起動して `DATE (MM,DD,YY)?` を聞き、`CAT` でファイル一覧(SAVE、PCGET、…、BASIC、CC、WC など、残り 493 セクタ)が出ます。「CP/68」は `HEMENWAY ASSOCIATES CP/68-1.0` が起動して、`DIR` で INIT、LINK、PIP、CP68.SYS などが出ます。FLEX では、ディスクに入っている `BASIC.CMD`(59 セクタ)も動きます(`BASIC` と打つと `READY`、`PRINT 2+3` が 5、FOR ループが `1  4  9  16  25`)。FLEX BASIC では `SAVE "SQUARES"` でディスクに保存し、`NEW` のあと `LOAD "SQUARES"` で読み戻せます(`SQUARES.BAS` が FLEX のディレクトリに載ります)。ディスクへの書き込みは、ディスク操作が止まって約 1.5 秒後に作業コピー(`~/Library/Application Support/AltairSim/disks/`)へ自動で書き戻されるので、アプリを閉じても残ります。CP/68 では `PIP COPY1.SYS=CP68.SYS` でディスクへの書き込みを確かめ、書いたファイルを `COPY2.SYS=COPY1.SYS` で読み戻せます(PIP は一度起動すると `PIP-` のプロンプトに入ったままになります。抜け方は資料がなく未確認です)。SAVE したファイルは、別の機械で起動し直しても `CAT` に残り `LOAD` できることをテストで確認しています。FD3712 の待ち時間(読み書き約 6.4ms、シークは1トラック 1ms)はデータシートからの近似で、実機での実測値とは照合できていません。680b の電源スイッチは実機では背面パネルにある(取扱説明書 p.14)ので、前面パネルには付けず、画面左側のボタン列の「電源(背面)」で切り替えます。OFF で全ランプが消えて CPU が止まり、ON にすると AC ランプが点いて、PROM モニタが起動します。どちらも起動 PROM(`altair680/boot/BOOT.S19`)、SWIMON、68-UIO、RAM 48KB、ドライブ A のディスクで、モニタの `J FC00` から起動します
 - 配布の FLEX 3.0 のイメージは、ブートローダ(トラック 0 の物理セクタ 1 の 5・6 バイト目)にシステムファイル(FLEX3.SYS)の位置が書かれていません(LINK.CMD を実行する前の状態)。このままでは、ローダがトラック 0 セクタ 0 を読もうとして起動をやり直し続けます。「FLEX 3.0」ボタンは、作業用コピーに LINK と同じ処理(`FLEXImage.linkBootLoader`。ディレクトリから FLEX3.SYS のトラック 17・セクタ 12 を探して書く)を行ってから起動します。元のイメージは変えません
 - ドライブのラベル、作業用コピーの扱い(`~/Library/Application Support/AltairSim/disks/`)は、8800 のディスクと同じです
+
+## IMSAI 8080
+
+機種切り替えの「IMSAI 8080」で、IMSAI 8080 を動かします(8080 と S-100 バスは Altair 8800 と同じで、パネル、シリアルボード、フロッピーが違います)。CPU とメモリは Altair 8800 と共通です。
+
+- **フロントパネル(CP-A):** 実機の写真と CP-A のマニュアルをもとに描いています。左上にプログラム出力 LED(8)、ステータスバイト LED(MEMR、INP、M1、OUT、HLTA、STACK、WO、INTA の 8)、アドレス LED A15〜A8 とパドル 8 個。中央にデータバス LED、アドレス LED A7〜A0 とパドル 8 個(データスイッチも兼ねる)。右に INTERRUPT ENABLED、RUN、WAIT、HOLD の LED と、制御用のパドル 6 個(EXAMINE/EXAMINE NEXT、DEPOSIT/DEPOSIT NEXT、RESET/EXT CLR、RUN/STOP、SINGLE STEP、PWR ON/OFF)です。パドルは上半分と下半分で動作が決まり、青と赤で色分けされています。
+- **I/O ポート:** `02/03` と `04/05` が SIO-2 のチャンネル A と B(データ/ステータス、8251 と同じビット配置)、`FD` が FIF フロッピー、`FF` が入力 = 上位アドレススイッチ(A8〜A15)・出力 = プログラム出力 LED(反転して点灯)です。
+- **FIF フロッピー:** IMSAI のフロッピーインタフェースは、ボード上の 8080 がファームウェア(`fifware.asm`)を実行して、メモリ上の 7 バイトのコマンド列を読み、結果をステータスバイトに書き戻します。このシミュレータは、ファームウェアの 8080 は動かさずに、ホストから見える動作(コマンド列の検査とエラーコード C1〜C6・A1〜A3・93、読み出し、書き込み、トラックのフォーマット、所要時間の近似)を再現しています。ディスクは IBM 3740 形式(77 トラック × 26 セクタ × 128 バイト = 256,256 バイト)で、680b と同じです。FIF は、未フォーマットのセクタを読めず(93)、書き込みかトラックのフォーマット(機能 3)で存在するようになります。
+- **起動:** 「CP/M 1.31」ボタンは、ドライブ A に IMSAI CP/M 1.31 のディスクを入れて電源を入れ、FIF のブート(起動セクタをメモリの 0 番地へ読んで実行)を再現します。`DIR` で PIP、STAT、ED、DDT、ASM などが出て、`PIP COPY.COM=STAT.COM` でディスクに書き込めます。
+- **新規の空ディスク:** 「ディスク」メニューの「ドライブ X に新規の空ディスク(フォーマット済み)を作成…」は、IMSAI ではフォーマット済みの空ディスクを作ります(トラック 2 の CP/M ディレクトリだけ E5 で埋め、残りは 0)。IMSAI CP/M 1.31 には、ディスクをフォーマットする機能がないからです。ユーザーガイド(6.6 SYSGEN の項)に、新しいディスクは初期化なしで使う前提だとあり、IMDOS 付属の `FORMAT.COM`(IMSAI FORMATTER-INITIALIZER 2.05)を CP/M 1.31 で動かすと「INCOMPATIBLE VERSION OF SYSTEM / FORMAT ABORTED」で中止することを、テストで確かめました。ドライブ B に入れて `B:`、`DIR`(`NOT FOUND` = 空)、`A:PIP B:STAT2.COM=A:STAT.COM`、`DIR`、`STAT2` まで、画面で確かめています。
+- **ディスクイメージ:** 設定画面の一覧に、IMSAI 8080 用のディスクが 10 件あります(取得元のリンクつき)。CP/M 1.31(16K)は deramp.com、そのほかは z80pack のミラー([icl1900.co.uk/unix4fun/z80pack/ftp/imsai/](https://www.icl1900.co.uk/unix4fun/z80pack/ftp/imsai/readme.txt))の `.tgz` です。CP/M 1.33(52K、Udo Munk による復元)、CP/M 2.2(54K)、Fig-Forth(CP/M 2.2 上)、IMDOS 2.02(54K)、IMDOS 2.05 rev.0(54K、ディスク 2 枚)、IMDOS 2.05 rev.1(16K、Maslin 版と Peters 版)、IMDOS の `FORMAT.COM` です。`.tgz` は展開せずに、そのまま「ファイル・フォルダを取り込み…」へ渡せます(アプリが一時フォルダへ展開し、中の `.dsk` を名前で判別して、取り込み後に一時フォルダを消します)。「ほかの OS で起動」メニューには、取り込んだシステムディスクだけが選べます。
+- **起動を確かめたもの:** CP/M 1.31(16K)、CP/M 1.33(52K)、CP/M 2.2(54K)、Fig-Forth、IMDOS 2.02、IMDOS 2.05 rev.0、IMDOS 2.05 rev.1(2 種)は、FIF のブートで起動し、`DIR` が動くことを確かめました(自動テスト `testOtherIMSAISystemDisksBoot`。CP/M 1.31 だけは、アプリの画面でも確認しています)。UCSD p-System IV(`ucsd-iv.tgz`)は、起動しても出力がなく、原因は調べていません。
+
+画面で確認した範囲は、起動(「IMSAI 16K CP/M VERS 1.31」と `A>`)、`DIR`、パネルの手入力(アドレススイッチ、EXAMINE、データスイッチ、DEPOSIT、DEPOSIT NEXT、RUN、プログラム出力 LED、HLT での停止)です。自動テスト(`IMSAITests`)では、起動、`DIR`、`PIP` でのコピー、`STAT`、FIF のコマンド(未フォーマットのセクタ、トラックのフォーマット、書き込みと読み出し、エラーコード、書き込み禁止)、ポート FF、SIO-2、EXAMINE と DEPOSIT を確かめています。
+
+未確認のこと: IMSAI のパネルの INTA と HOLD の LED は常に消灯です(割り込み応答と HOLD は未実装)。FIF のファームウェアが返す A1〜A3 と C1〜C6 以外のエラーコード(91、92、94〜97)は再現していません。IMDOS、IMSAI の BASIC、VIO(ビデオ)は対象外です。SIO-2 のボーレートやモード設定は読み捨てています。
+
+## 共通の機能
+
+端末と、その上の設定(CPU の速度、シリアルの速度、削除キー)は、3 機種で共通です。端末の画面は機種ごとに保持されます。
+
+### 電源と機種の切り替え
+
+アプリを起動した直後は、8800 も 680b も電源オフです(全ランプ消灯)。電源は機種ごとに独立していて、機種タブを切り替えても、もう一方の電源や端末の画面はそのまま残ります。8800 は、パネルの POWER スイッチを入れるか、「CP/M 2.2」などの起動ボタンを押して始めます。POWER スイッチで始めたときは、RUN スイッチを実機と同じく自分で操作します。起動ボタン(「BASIC 8K」「CP/M 2.2」「CP/M 3」「Zork」)は、電源を入れて、起動番地から実行するところまで行います。680b は、電源を入れると PROM モニタが起動して「.」プロンプトが出ます。
+
+### 端末(80 桁 × 24 行)
+
+端末は 80 × 24 の画面バッファを持ち、次の制御を解釈します。
+
+- 制御文字: CR、LF(最下行でスクロール)、BS(カーソルを戻すだけ。文字は消えない。CP/M の BS-SP-BS で消える)、TAB。DEL(7Fh)などは無視します
+- ANSI(VT100 系): `ESC [ H` `f`(位置指定)、`A B C D`(移動)、`J`(画面消去)、`K`(行消去)、`L M`(行挿入・削除)。`m`(文字属性)は無視します
+- ADM-3A: `ESC = 行 桁`(位置指定)、1Eh(ホーム)、1Ah(画面消去)
+
+WM(WORDMASTER、CP/M 2.2 ディスクに入っている画面エディタ)が ANSI のシーケンスで画面を制御するため、この解釈が必要でした。
+
+### 削除キー
+
+端末の削除キーは、起動するプログラムに合わせて送るコードを切り替えます(端末の設定「削除キー」で変更もできます)。
+
+| 設定 | コード | 使い所 |
+|---|---|---|
+| BS(^H) | 08h | CP/M(既定)。「BS-SP-BS」で画面上の文字を消す |
+| DEL(7F) | 7Fh | CP/M は削除した文字をそのままエコーする(ハードコピー端末向け)。Altair BASIC は `\9\` のように表示する |
+| _(Altair BASIC) | 5Fh | Altair BASIC(「BASIC 8K」を起動すると自動で選ぶ)。BASIC は削除した上で `_` を表示する |
+
+Mac の delete キーは SwiftUI の `.delete` と一致せず、U+007F の文字として届くため、文字で判定しています。fn + delete(前方削除)は ADM-3A の RUB OUT にあたる 7Fh を送ります。
+
+### 速度オプション
+
+端末の上のメニューで切り替えます。
+
+- CPU: `実機の速度`(実時間に合わせて実行し、遅れた分は取り戻す。0.1 秒を超える遅れは切り捨て)/ `最速`
+- シリアル: `制限なし` / 9600 / 1200 / 300 / 110 ボー(テレタイプ、11 ビット/文字)。
+  送信可ビット(ステータスの bit1)が文字の所要時間だけ下がり、BASIC などステータスを見て出力するプログラムが遅くなる
+
+## 構成
+
+- `Sources/AltairCore`: 機種の本体とデバイス(UI を含まない)
+  - Altair 8800: 8080 CPU(`CPU.swift`。全命令、クロック数つき)、本体(`Machine.swift`。64KB メモリ、2SIO 相当のシリアル(ポート 10h/11h)、センススイッチ(ポート FFh))、88-DCDD(`DiskController.swift`)
+  - Altair 680b: MC6800 CPU(`CPU6800.swift`)、本体(`Altair680Machine.swift`)、68-UIO の PIA(`PIA6821.swift`)、FD3712(`FD3712Controller.swift`)、FLEX イメージの補助(`FLEXImage.swift`)
+  - IMSAI 8080: 本体と SIO-2(`IMSAIMachine.swift`)、FIF(`FIFController.swift`)
+  - 共通: Intel HEX と S レコードのローダー(`HexLoader.swift`、`S19Loader.swift`)、80 × 24 の端末(`TerminalScreen.swift`)、CP/M 2.2 ディスクの読み書き(`CPMDisk.swift`)、ROM・ディスクのライブラリ(`AssetLibrary.swift`、`UserLibrary.swift`)、組み込みのデモ(`Programs.swift`)
+- `Sources/AltairSim`: SwiftUI のアプリ
+  - フロントパネル(`FrontPanelView.swift` が 8800、`FrontPanel680View.swift`、`FrontPanelIMSAIView.swift`)、ディスクドライブ(`DiskDriveView.swift`)、端末(`TerminalView.swift`)
+  - 設定画面(`LibrarySettingsView.swift`、`UserItemEditor.swift`、`CPMDiskBuilder.swift`)、全体の状態と操作(`SimulatorModel.swift`、`AltairSimApp.swift`)
 
 ## ライセンス
 
