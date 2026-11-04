@@ -1,267 +1,271 @@
 # Altair 8800 Simulator (Swift / macOS)
 
-Intel 8080 搭載の Altair 8800(1975年)のシミュレータ。
+**English** | [日本語](README.ja.md) | [Website](https://masakai.github.io/AltairSim/)
 
-[![AltairSim 紹介動画(23秒、ナレーション付き)](docs/media/altairsim.jpg)](docs/media/altairsim.mp4)
+A simulator of the Altair 8800 (1975), built around the Intel 8080.
 
-Altair 8800、Altair 680b、IMSAI 8080 を、実機のフロントパネルと端末つきで動かします(動画は 23 秒、ナレーション付き。画像をクリックすると再生します)。
+[![AltairSim intro video (23 s, narrated)](docs/media/altairsim-en.jpg)](docs/media/altairsim-en.mp4)
 
-紹介ページ(英語・日本語、英語ナレーションの動画もあります): https://masakai.github.io/AltairSim/
+It runs the Altair 8800, the Altair 680b and the IMSAI 8080 with their front panels and a terminal (the video is 23 seconds long, with English narration; click the image to play it). A version with Japanese narration is on the [website](https://masakai.github.io/AltairSim/).
 
-## 実行
+The app's menus and buttons are in Japanese. In this README, labels are given as they appear in the app, followed by an English translation.
 
-```bash
-swift run AltairSim   # アプリ起動
-swift test            # CPU・パネル・ローダーのテスト
-```
-
-### アプリ(.app)として使う
+## Running
 
 ```bash
-Tools/make_app.sh              # build/AltairSim.app を作る(いまのマシンの向きだけ)
-Tools/make_app.sh --universal  # Apple シリコンと Intel の両方に対応
-Tools/make_app.sh --install    # 作成後に ~/Applications へコピーする
+swift run AltairSim   # launch the app
+swift test            # tests for the CPUs, panels and loaders
 ```
 
-`build/AltairSim.app` ができます(Dock のアイコンは `Tools/make_icon.py` で描いています)。署名はアドホック(自分のマシンで使う前提)で、公証はしていません。他のマシンへ配る場合は、Developer ID での署名と公証が別途必要です。Bundle ID は環境変数 `BUNDLE_ID`(既定 `local.altairsim`)、バージョンは `VERSION`(既定 1.0)で変えられます。
+### Using it as an app (.app)
 
-ROM・ディスクイメージはアプリに含まれていないので、初回は設定(⌘,)から取り込みます(下の「ROM・ディスクイメージの取り込み」)。取り込んだファイルは `~/Library/Application Support/AltairSim/library/` にあり、`swift run` で起動した場合と共通です。
+```bash
+Tools/make_app.sh              # build build/AltairSim.app (for this Mac's architecture only)
+Tools/make_app.sh --universal  # Apple silicon and Intel
+Tools/make_app.sh --install    # copy it to ~/Applications after building
+```
 
-## 構成
+This creates `build/AltairSim.app` (the Dock icon is drawn by `Tools/make_icon.py`). It is ad hoc signed, for use on your own Mac, and not notarized. To give it to other people, you need to sign it with a Developer ID and notarize it. The bundle ID can be changed with the environment variable `BUNDLE_ID` (default `local.altairsim`), and the version with `VERSION` (default 1.0).
 
-- `Sources/AltairCore`: 8080 CPU(全命令、クロック数つき)、64KB メモリ、2SIO 相当のシリアル(ポート 10h/11h)、センススイッチ(ポート FFh)、Intel HEX ローダー
-- `Sources/AltairSim`: SwiftUI のフロントパネル(A0-A15 スイッチ、アドレス/データ LED、EXAMINE/DEPOSIT/RUN/STEP/RESET)と端末
+ROMs and disk images are not included in the app, so on first use you import them from Settings (⌘,) (see "Importing ROMs and disk images" below). Imported files go to `~/Library/Application Support/AltairSim/library/`, which is shared with `swift run`.
 
-## 使い方
+## Layout
 
-- 「デモを読み込む」→ HELLO / ECHO を 0000 に配置、RUN/STOP で実行
-- 手入力: アドレススイッチを設定して EXAMINE、データを設定して DEPOSIT NEXT を繰り返す
-- BASIC 等は手元のイメージ(`.bin` は 0000 に配置、`.hex` はレコードのアドレスに配置)を「ファイルを読み込む」で読み込み、RESET → RUN
+- `Sources/AltairCore`: 8080 CPU (every instruction, with clock counts), 64 KB of memory, a 2SIO-style serial port (ports 10h/11h), sense switches (port FFh), Intel HEX loader
+- `Sources/AltairSim`: the SwiftUI front panel (A0–A15 switches, address/data LEDs, EXAMINE/DEPOSIT/RUN/STEP/RESET) and the terminal
+
+## Usage
+
+- 「デモを読み込む」 (load demo) → places HELLO / ECHO at 0000; run it with RUN/STOP
+- Entering by hand: set the address switches and EXAMINE, then set the data and repeat DEPOSIT NEXT
+- For BASIC and other programs, load your own image (`.bin` goes to 0000, `.hex` goes to the record addresses) with 「ファイルを読み込む」 (load file), then RESET → RUN
 
 ## IMSAI 8080
 
-機種切り替えの「IMSAI 8080」で、IMSAI 8080 を動かします(8080 と S-100 バスは Altair 8800 と同じで、パネル、シリアルボード、フロッピーが違います)。CPU とメモリは Altair 8800 と共通です。
+Choose 「IMSAI 8080」 in the machine selector to run the IMSAI 8080. The 8080 and the S-100 bus are the same as on the Altair 8800; the panel, the serial board and the floppy are different. The CPU and memory are shared with the Altair 8800.
 
-- **フロントパネル(CP-A):** 実機の写真と CP-A のマニュアルをもとに描いています。左上にプログラム出力 LED(8)、ステータスバイト LED(MEMR、INP、M1、OUT、HLTA、STACK、WO、INTA の 8)、アドレス LED A15〜A8 とパドル 8 個。中央にデータバス LED、アドレス LED A7〜A0 とパドル 8 個(データスイッチも兼ねる)。右に INTERRUPT ENABLED、RUN、WAIT、HOLD の LED と、制御用のパドル 6 個(EXAMINE/EXAMINE NEXT、DEPOSIT/DEPOSIT NEXT、RESET/EXT CLR、RUN/STOP、SINGLE STEP、PWR ON/OFF)です。パドルは上半分と下半分で動作が決まり、青と赤で色分けされています。
-- **I/O ポート:** `02/03` と `04/05` が SIO-2 のチャンネル A と B(データ/ステータス、8251 と同じビット配置)、`FD` が FIF フロッピー、`FF` が入力 = 上位アドレススイッチ(A8〜A15)・出力 = プログラム出力 LED(反転して点灯)です。
-- **FIF フロッピー:** IMSAI のフロッピーインタフェースは、ボード上の 8080 がファームウェア(`fifware.asm`)を実行して、メモリ上の 7 バイトのコマンド列を読み、結果をステータスバイトに書き戻します。このシミュレータは、ファームウェアの 8080 は動かさずに、ホストから見える動作(コマンド列の検査とエラーコード C1〜C6・A1〜A3・93、読み出し、書き込み、トラックのフォーマット、所要時間の近似)を再現しています。ディスクは IBM 3740 形式(77 トラック × 26 セクタ × 128 バイト = 256,256 バイト)で、680b と同じです。FIF は、未フォーマットのセクタを読めず(93)、書き込みかトラックのフォーマット(機能 3)で存在するようになります。
-- **起動:** 「CP/M 1.31」ボタンは、ドライブ A に IMSAI CP/M 1.31 のディスクを入れて電源を入れ、FIF のブート(起動セクタをメモリの 0 番地へ読んで実行)を再現します。`DIR` で PIP、STAT、ED、DDT、ASM などが出て、`PIP COPY.COM=STAT.COM` でディスクに書き込めます。
-- **新規の空ディスク:** 「ディスク」メニューの「ドライブ X に新規の空ディスク(フォーマット済み)を作成…」は、IMSAI ではフォーマット済みの空ディスクを作ります(トラック 2 の CP/M ディレクトリだけ E5 で埋め、残りは 0)。IMSAI CP/M 1.31 には、ディスクをフォーマットする機能がないからです。ユーザーガイド(6.6 SYSGEN の項)に、新しいディスクは初期化なしで使う前提だとあり、IMDOS 付属の `FORMAT.COM`(IMSAI FORMATTER-INITIALIZER 2.05)を CP/M 1.31 で動かすと「INCOMPATIBLE VERSION OF SYSTEM / FORMAT ABORTED」で中止することを、テストで確かめました。ドライブ B に入れて `B:`、`DIR`(`NOT FOUND` = 空)、`A:PIP B:STAT2.COM=A:STAT.COM`、`DIR`、`STAT2` まで、画面で確かめています。
-- **ディスクイメージ:** 設定画面の一覧に、IMSAI 8080 用のディスクが 10 件あります(取得元のリンクつき)。CP/M 1.31(16K)は deramp.com、そのほかは z80pack のミラー([icl1900.co.uk/unix4fun/z80pack/ftp/imsai/](https://www.icl1900.co.uk/unix4fun/z80pack/ftp/imsai/readme.txt))の `.tgz` です。CP/M 1.33(52K、Udo Munk による復元)、CP/M 2.2(54K)、Fig-Forth(CP/M 2.2 上)、IMDOS 2.02(54K)、IMDOS 2.05 rev.0(54K、ディスク 2 枚)、IMDOS 2.05 rev.1(16K、Maslin 版と Peters 版)、IMDOS の `FORMAT.COM` です。`.tgz` は展開せずに、そのまま「ファイル・フォルダを取り込み…」へ渡せます(アプリが一時フォルダへ展開し、中の `.dsk` を名前で判別して、取り込み後に一時フォルダを消します)。「ほかの OS で起動」メニューには、取り込んだシステムディスクだけが選べます。
-- **起動を確かめたもの:** CP/M 1.31(16K)、CP/M 1.33(52K)、CP/M 2.2(54K)、Fig-Forth、IMDOS 2.02、IMDOS 2.05 rev.0、IMDOS 2.05 rev.1(2 種)は、FIF のブートで起動し、`DIR` が動くことを確かめました(自動テスト `testOtherIMSAISystemDisksBoot`。CP/M 1.31 だけは、アプリの画面でも確認しています)。UCSD p-System IV(`ucsd-iv.tgz`)は、起動しても出力がなく、原因は調べていません。
+- **Front panel (CP-A):** drawn from photos of the real machine and the CP-A manual. Top left: 8 programmed-output LEDs, 8 status-byte LEDs (MEMR, INP, M1, OUT, HLTA, STACK, WO, INTA), address LEDs A15–A8 and 8 paddles. Center: data bus LEDs, address LEDs A7–A0 and 8 paddles (which also serve as data switches). Right: the INTERRUPT ENABLED, RUN, WAIT and HOLD LEDs, and 6 control paddles (EXAMINE/EXAMINE NEXT, DEPOSIT/DEPOSIT NEXT, RESET/EXT CLR, RUN/STOP, SINGLE STEP, PWR ON/OFF). Each paddle does one thing on its upper half and another on its lower half, and they are colored blue and red.
+- **I/O ports:** `02/03` and `04/05` are channels A and B of the SIO-2 (data/status, with the same bit layout as the 8251), `FD` is the FIF floppy, and `FF` is input = upper address switches (A8–A15) and output = programmed-output LEDs (lit when the bit is 0).
+- **FIF floppy:** on the real IMSAI floppy interface, an 8080 on the board runs firmware (`fifware.asm`) that reads a 7-byte command string from memory and writes the result back to a status byte. This simulator does not run that firmware's 8080. It reproduces the behavior the host sees: checking the command string and the error codes C1–C6, A1–A3 and 93, reading, writing, formatting a track, and an approximation of the time each takes. Disks are IBM 3740 format (77 tracks × 26 sectors × 128 bytes = 256,256 bytes), the same as the 680b. The FIF cannot read an unformatted sector (93); a sector comes into existence when it is written or its track is formatted (function 3).
+- **Booting:** the 「CP/M 1.31」 button inserts an IMSAI CP/M 1.31 disk in drive A, powers on, and reproduces the FIF boot (it reads the boot sector to address 0 and runs it). `DIR` lists PIP, STAT, ED, DDT, ASM and others, and `PIP COPY.COM=STAT.COM` writes to the disk.
+- **New blank disks:** in the 「ディスク」 (Disk) menu, 「ドライブ X に新規の空ディスク(フォーマット済み)を作成…」 (create a new formatted blank disk in drive X) creates a formatted blank disk on the IMSAI (only the CP/M directory on track 2 is filled with E5; the rest is 0). This is because IMSAI CP/M 1.31 has no way to format a disk. The user guide (section 6.6, SYSGEN) assumes new disks are used without initializing them, and a test confirmed that running IMDOS's `FORMAT.COM` (IMSAI FORMATTER-INITIALIZER 2.05) on CP/M 1.31 stops with "INCOMPATIBLE VERSION OF SYSTEM / FORMAT ABORTED". With such a disk in drive B, `B:`, `DIR` (`NOT FOUND` = empty), `A:PIP B:STAT2.COM=A:STAT.COM`, `DIR` and `STAT2` were checked on screen.
+- **Disk images:** the list in the Settings window has 10 disks for the IMSAI 8080, each with a link to where it comes from. CP/M 1.31 (16K) is from deramp.com; the others are `.tgz` files on a z80pack mirror ([icl1900.co.uk/unix4fun/z80pack/ftp/imsai/](https://www.icl1900.co.uk/unix4fun/z80pack/ftp/imsai/readme.txt)): CP/M 1.33 (52K, restored by Udo Munk), CP/M 2.2 (54K), Fig-Forth (on CP/M 2.2), IMDOS 2.02 (54K), IMDOS 2.05 rev.0 (54K, two disks), IMDOS 2.05 rev.1 (16K, the Maslin and Peters versions), and IMDOS's `FORMAT.COM`. A `.tgz` can be passed to 「ファイル・フォルダを取り込み…」 (import files/folders) without unpacking it: the app unpacks it into a temporary folder, identifies the `.dsk` files inside by name, and deletes the temporary folder after importing. The 「ほかの OS で起動」 (boot another OS) menu lists only the system disks you have imported.
+- **Confirmed to boot:** CP/M 1.31 (16K), CP/M 1.33 (52K), CP/M 2.2 (54K), Fig-Forth, IMDOS 2.02, IMDOS 2.05 rev.0 and IMDOS 2.05 rev.1 (both versions) boot through the FIF boot and `DIR` works (automated test `testOtherIMSAISystemDisksBoot`; only CP/M 1.31 was also checked on screen in the app). UCSD p-System IV (`ucsd-iv.tgz`) produces no output after booting; the cause has not been investigated.
 
-画面で確認した範囲は、起動(「IMSAI 16K CP/M VERS 1.31」と `A>`)、`DIR`、パネルの手入力(アドレススイッチ、EXAMINE、データスイッチ、DEPOSIT、DEPOSIT NEXT、RUN、プログラム出力 LED、HLT での停止)です。自動テスト(`IMSAITests`)では、起動、`DIR`、`PIP` でのコピー、`STAT`、FIF のコマンド(未フォーマットのセクタ、トラックのフォーマット、書き込みと読み出し、エラーコード、書き込み禁止)、ポート FF、SIO-2、EXAMINE と DEPOSIT を確かめています。
+Checked on screen: booting ("IMSAI 16K CP/M VERS 1.31" and `A>`), `DIR`, and entering a program on the panel (address switches, EXAMINE, data switches, DEPOSIT, DEPOSIT NEXT, RUN, programmed-output LEDs, stopping at HLT). The automated tests (`IMSAITests`) cover booting, `DIR`, copying with `PIP`, `STAT`, FIF commands (unformatted sectors, formatting a track, writing and reading, error codes, write protect), port FF, the SIO-2, and EXAMINE and DEPOSIT.
 
-未確認のこと: IMSAI のパネルの INTA と HOLD の LED は常に消灯です(割り込み応答と HOLD は未実装)。FIF のファームウェアが返す A1〜A3 と C1〜C6 以外のエラーコード(91、92、94〜97)は再現していません。IMDOS、IMSAI の BASIC、VIO(ビデオ)は対象外です。SIO-2 のボーレートやモード設定は読み捨てています。
+Not yet confirmed: the INTA and HOLD LEDs on the IMSAI panel are always off (interrupt acknowledge and HOLD are not implemented). FIF error codes other than A1–A3 and C1–C6 (91, 92, 94–97) are not reproduced. IMDOS, IMSAI BASIC and the VIO (video) are out of scope. SIO-2 baud rate and mode settings are read and ignored.
 
-## ROM・ディスクイメージの取り込み
+## Importing ROMs and disk images
 
-ROM、ディスクイメージ、8080 テストプログラムは、配布元のライセンスの都合で**このリポジトリにもアプリにも含めていません**。使うには、ご自身で配布元の条件を確認して取得し、アプリに取り込みます。
+Because of their distributors' licenses, ROMs, disk images and 8080 test programs are **not included in this repository or in the app**. To use them, check each distributor's terms yourself, download the files, and import them into the app.
 
-1. メニュー「AltairSim ▸ 設定…」(⌘,)を開きます
-2. 一覧の各項目の「取得元」リンクからファイルを入手します(一覧には項目ごとの想定サイズも出ます)
-3. 「ファイル・フォルダを取り込み…」で複数のファイルやフォルダをまとめて選ぶか、一覧へドラッグします。ファイル名で項目を判別します。名前が違うファイルは、項目の「取り込み…」で指定して取り込めます
-4. 取り込み済みの項目は緑のチェックになります
+1. Open the menu 「AltairSim ▸ 設定…」 (Settings…, ⌘,)
+2. Download each file from its 「取得元」 (source) link in the list (the list also shows the expected size of each item)
+3. Choose several files or folders at once with 「ファイル・フォルダを取り込み…」 (import files/folders), or drag them onto the list. Items are identified by file name. A file with a different name can be imported with the item's own 「取り込み…」 (import…) button
+4. Imported items get a green check mark
 
-取り込んだファイルは `~/Library/Application Support/AltairSim/library/` にコピーされます(環境変数 `ALTAIR_LIBRARY` で場所を変えられます。テスト用です)。ファイルがない機能のボタンを押すと、足りないファイル名を状態欄に出して設定画面を開きます。サイズが想定と違うファイルも取り込みますが、警告を出します。ライブラリ内の置き場所の一覧は [docs/library.md](docs/library.md) にあります。
+Imported files are copied to `~/Library/Application Support/AltairSim/library/` (the location can be changed with the environment variable `ALTAIR_LIBRARY`, which is meant for tests). If you press the button for a feature whose files are missing, the app shows the missing file names in the status bar and opens the Settings window. A file whose size differs from the expected size is still imported, with a warning. The list of where each file goes inside the library is in [docs/library.md](docs/library.md) (in Japanese).
 
-### 入手先
+### Where to get them
 
-ファイルごとの正確な取得元 URL は、設定画面の一覧(「取得元」リンク)と `Sources/AltairCore/AssetLibrary.swift` の `catalog` にあります。URL は 2026-10 時点のものです。
+The exact source URL for each file is in the list in the Settings window (the 「取得元」 links) and in `catalog` in `Sources/AltairCore/AssetLibrary.swift`. The URLs are as of October 2026.
 
-| 機種・用途 | ファイル | 探す場所 |
+| Machine / use | Files | Where to look |
 |---|---|---|
-| Altair 8800 | Altair BASIC 8K ROM(`8kBas_e0/e8/f0/f8.bin`) | [altairclone.com/downloads/roms/8K BASIC/](https://altairclone.com/downloads/roms/8K%20BASIC/) |
-| Altair 8800 | ディスクブートローダ(`88dskrom.bin`) | [github.com/tommojphillips/Altair8800](https://github.com/tommojphillips/Altair8800/tree/master/roms) の `roms/` |
-| Altair 8800 | CP/M 2.2b、CP/M 3、Zork、BASIC コンパイラ、BDS C、FORTRAN-80、COBOL-80 | [altairclone.com/downloads/cpm/](https://altairclone.com/downloads/cpm/) の下の各フォルダ |
-| Altair 8800 | Altair DOS 用 FORTRAN 2.8 | [altairclone.com/downloads/altair_dos/](https://altairclone.com/downloads/altair_dos/) |
-| 8080 命令テスト | `TST8080.COM` `8080PRE.COM` `CPUTEST.COM` `8080EXM.COM` | [github.com/superzazu/8080](https://github.com/superzazu/8080/tree/master/cpu_tests) の `cpu_tests/` |
-| Altair 680b | PROM モニタ(`MON680.S19`、`SWIMON.S19`)、BASIC、起動 PROM(`BOOT.S19`)、FLEX 3.0、CP/68 | [deramp.com/downloads/altair/software/altair_680/](https://deramp.com/downloads/altair/software/altair_680/) の下の各フォルダ |
-| IMSAI 8080 | CP/M 1.31(`imsai-cpm13.dsk`)、IMDOS の `FORMAT.COM` | [deramp.com の IMSAI ソフトウェア](https://deramp.com/downloads/mfe_archive/010-S100%20Computers%20and%20Boards/00-Imsai/40-Imsai%20Software/) の `IMSAI CPM/` と `IMDOS/` |
-| IMSAI 8080 | CP/M 1.33、CP/M 2.2、Fig-Forth、IMDOS 2.02 / 2.05(`.tgz`) | z80pack のミラー [icl1900.co.uk/unix4fun/z80pack/ftp/imsai/](https://www.icl1900.co.uk/unix4fun/z80pack/ftp/imsai/readme.txt) |
+| Altair 8800 | Altair BASIC 8K ROM (`8kBas_e0/e8/f0/f8.bin`) | [altairclone.com/downloads/roms/8K BASIC/](https://altairclone.com/downloads/roms/8K%20BASIC/) |
+| Altair 8800 | Disk boot loader (`88dskrom.bin`) | `roms/` in [github.com/tommojphillips/Altair8800](https://github.com/tommojphillips/Altair8800/tree/master/roms) |
+| Altair 8800 | CP/M 2.2b, CP/M 3, Zork, BASIC Compiler, BDS C, FORTRAN-80, COBOL-80 | the folders under [altairclone.com/downloads/cpm/](https://altairclone.com/downloads/cpm/) |
+| Altair 8800 | FORTRAN 2.8 for Altair DOS | [altairclone.com/downloads/altair_dos/](https://altairclone.com/downloads/altair_dos/) |
+| 8080 instruction tests | `TST8080.COM` `8080PRE.COM` `CPUTEST.COM` `8080EXM.COM` | `cpu_tests/` in [github.com/superzazu/8080](https://github.com/superzazu/8080/tree/master/cpu_tests) |
+| Altair 680b | PROM monitors (`MON680.S19`, `SWIMON.S19`), BASIC, boot PROM (`BOOT.S19`), FLEX 3.0, CP/68 | the folders under [deramp.com/downloads/altair/software/altair_680/](https://deramp.com/downloads/altair/software/altair_680/) |
+| IMSAI 8080 | CP/M 1.31 (`imsai-cpm13.dsk`), IMDOS's `FORMAT.COM` | `IMSAI CPM/` and `IMDOS/` in [IMSAI software on deramp.com](https://deramp.com/downloads/mfe_archive/010-S100%20Computers%20and%20Boards/00-Imsai/40-Imsai%20Software/) |
+| IMSAI 8080 | CP/M 1.33, CP/M 2.2, Fig-Forth, IMDOS 2.02 / 2.05 (`.tgz`) | z80pack mirror [icl1900.co.uk/unix4fun/z80pack/ftp/imsai/](https://www.icl1900.co.uk/unix4fun/z80pack/ftp/imsai/readme.txt) |
 
-altairclone.com で配られているファイルの一覧は [docs/altairclone-downloads.md](docs/altairclone-downloads.md) にまとめています。
+A list of the files distributed on altairclone.com is in [docs/altairclone-downloads.md](docs/altairclone-downloads.md) (in Japanese).
 
-### 未フォーマットの空ディスク
+### Unformatted blank disks
 
-「ディスク」メニューの「ドライブ X に新規の空ディスク(未フォーマット)を作成…」で、保存先を決めて空のイメージ(全バイト 0)を作り、そのドライブへ装着します。ゲスト OS のフォーマット用ツールでフォーマットして使います。
+In the 「ディスク」 (Disk) menu, 「ドライブ X に新規の空ディスク(未フォーマット)を作成…」 (create a new unformatted blank disk in drive X) asks where to save, creates a blank image (all bytes 0), and mounts it in that drive. Format it with the guest OS's formatting tool before use.
 
-| 機種 | フォーマット用ツール | 未フォーマットを読んだとき |
+| Machine | Formatting tool | Reading it unformatted |
 |---|---|---|
-| 8800(CP/M) | `AFORMAT B:`(CP/M 2.2 のディスクに入っている) | `Bdos Err On B: Bad Sector` |
-| 680b(FLEX 3.0) | `NEWDISK 1` | ディスクエラー |
-| 680b(CP/68) | `INIT 1`(確認に `Y`) | `FORMAT ERROR` |
+| 8800 (CP/M) | `AFORMAT B:` (on the CP/M 2.2 disk) | `Bdos Err On B: Bad Sector` |
+| 680b (FLEX 3.0) | `NEWDISK 1` | disk error |
+| 680b (CP/68) | `INIT 1` (answer `Y` to confirm) | `FORMAT ERROR` |
 
-- 680b(FD3712)は、セクタごとに「フォーマット済みか」を記録します。未フォーマットのセクタは読み出しがエラーになり、書き込むと存在するようになります。記録はイメージの隣の `<名前>.dsk.fmt` に保存します(全セクタがそろうと消えます)。
-- 8800(88-DCDD)は、ヘッダを書いていない生のセクタを CP/M のヘッダ検査が弾くので、記録は使いません。
-- 確認の範囲(いずれもアプリの画面で実行し、自動テスト `FormatToolsTests` でも確かめています):
-  - 8800: `AFORMAT B:` が 77 トラックを最後まで終え、`PIP` でのコピー、`DIR B:`、`STAT B:`(290k)まで動きます。
-  - 680b FLEX: 未フォーマットの `CAT 1` は読めない表示になり、`NEWDISK 1` で「FORMATTING COMPLETE / TOTAL SECTORS = 988」になります。その後の `CAT 1` は `DISK: MYDISK #1` と `SECTORS LEFT = 988` を表示し、`COPY` でコピーできます。
-  - 680b CP/68: 未フォーマットの `DIR 1` は `DSK ERROR: 05` になり、`INIT 1`(確認に `Y` と Return)のあとは `DIR 1` が `00000. SECTORS USED` を表示し、`PIP` でコピーできます。
-- CP/68 の `INIT` は、トラック 0 の最後のセクタを書きません。そのため `.fmt` が 1 セクタ分だけ残ります(使用には影響しません)。FLEX の `NEWDISK` は全セクタを書くので、`.fmt` は消えます。
-- 88-DCDD は、MITS のマニュアル(Altair Floppy Disk 88-DCDD)の記述に合わせて、ステップでヘッドが再びロードされること、書き込み許可の直後のヘッドアンロードが書き込み終了まで保留されることを実装しています。マニュアルにある時間の規定(ヘッドロード後 40ms、ENWD の 32µs 周期、書き込み電流 HCS の自動リセットなど)は、時間を持たないモデルなので実装していません。
+- The 680b (FD3712) records, for each sector, whether it has been formatted. Reading an unformatted sector is an error; writing it makes it exist. The record is saved next to the image as `<name>.dsk.fmt` (and deleted once every sector exists).
+- The 8800 (88-DCDD) does not use this record, because CP/M's header check rejects raw sectors that have no header written.
+- What was checked (all run on screen in the app, and also by the automated test `FormatToolsTests`):
+  - 8800: `AFORMAT B:` finishes all 77 tracks, and copying with `PIP`, `DIR B:` and `STAT B:` (290k) work.
+  - 680b FLEX: `CAT 1` on the unformatted disk shows that it cannot be read, and `NEWDISK 1` ends with "FORMATTING COMPLETE / TOTAL SECTORS = 988". After that, `CAT 1` shows `DISK: MYDISK #1` and `SECTORS LEFT = 988`, and `COPY` works.
+  - 680b CP/68: `DIR 1` on the unformatted disk gives `DSK ERROR: 05`. After `INIT 1` (confirm with `Y` and Return), `DIR 1` shows `00000. SECTORS USED`, and `PIP` can copy to it.
+- CP/68's `INIT` does not write the last sector of track 0, so one sector's worth of `.fmt` remains (this does not affect use). FLEX's `NEWDISK` writes every sector, so the `.fmt` file disappears.
+- Following the MITS manual (Altair Floppy Disk 88-DCDD), the 88-DCDD reloads the head on a step, and a head unload right after write enable is held until the write finishes. The manual's timing rules (40 ms after head load, the 32 µs ENWD period, the automatic reset of the write current HCS, and so on) are not implemented, because the model has no notion of time.
 
-### ユーザー追加(一覧にないファイルを自分で足す)
+### User items (adding files that are not in the list)
 
-設定画面の「ユーザー追加…」から、一覧にない ROM、プログラム、ディスクイメージを名前をつけて追加できます。追加したファイルは `library/user/files/` にコピーされ、一覧の「ユーザー追加」欄に出ます。登録内容は `library/user/items.json` に保存されるので、次に起動しても残ります。
+With 「ユーザー追加…」 (add user item) in the Settings window you can add ROMs, programs and disk images that are not in the list, with a name of your choice. Added files are copied to `library/user/files/` and appear in the 「ユーザー追加」 (user items) section of the list. The entries are saved in `library/user/items.json`, so they remain after a restart.
 
-| 種類 | 対象 | できること |
+| Kind | Accepts | What you can do |
 |---|---|---|
-| Altair 8800 ディスク | 337,568 バイト以上の `.dsk` | 「起動」(88dskrom から)、ドライブ A〜D へ「装着」 |
-| Altair 680b ディスク | 256,256 バイト以上の `.dsk` | 「起動」(FLEX や CP/68 と同じ起動 PROM から)、ドライブへ「装着」 |
-| Altair 8800 プログラム/ROM | `.hex`(各レコードのアドレス)、`.bin`(配置アドレスを指定) | RAM への読み込み、または ROM としての取り付け、開始アドレスから実行。RAM は 4〜64KB から選択 |
-| Altair 680b プログラム/ROM | `.s19` | 680b のモニタを起動して RAM へ読み込み、開始アドレスがあれば J で実行。「ROM として起動」にすると、モニタなしで RESET ベクタから起動 |
+| Altair 8800 disk | `.dsk` of 337,568 bytes or more | 「起動」 (boot, from 88dskrom), 「装着」 (mount) in drives A–D |
+| Altair 680b disk | `.dsk` of 256,256 bytes or more | 「起動」 (boot, from the same boot PROM as FLEX and CP/68), 「装着」 (mount) in a drive |
+| Altair 8800 program/ROM | `.hex` (at each record's address), `.bin` (at an address you give) | Load into RAM or install as ROM, then run from the start address. RAM size is selectable from 4 to 64 KB |
+| Altair 680b program/ROM | `.s19` | Starts the 680b monitor, loads the file into RAM, and runs it with J if it has a start address. With 「ROM として起動」 (boot as ROM) it starts from the RESET vector without the monitor |
 
-ファイルの拡張子とサイズから種類を自動で選びますが、追加するときに変えられます。ディスクは「作業コピーを破棄」で、追加したときの状態に戻せます。「編集…」で名前や開始アドレスを変えられます。「削除」は一覧の登録と、ライブラリ内のコピーを消します(元のファイルは消しません)。
+The kind is chosen automatically from the file's extension and size, and can be changed when adding. For disks, 「作業コピーを破棄」 (discard working copy) returns the disk to its state when it was added. 「編集…」 (edit) changes the name or the start address. 「削除」 (delete) removes the entry and the copy inside the library (the original file is not deleted).
 
-ディスクイメージは、起動のたびに `~/Library/Application Support/AltairSim/disks/` へ作業用コピーを作り、書き込みはそのコピーに入ります。ライブラリのファイルは変わりません。
+Each time a disk image is booted, a working copy is made in `~/Library/Application Support/AltairSim/disks/`, and writes go to that copy. The file in the library does not change.
 
-### CP/M ディスクをつくる(FORTRAN-80、COBOL-80 など)
+### Building a CP/M disk (FORTRAN-80, COBOL-80 and others)
 
-設定画面の「CP/M ディスクをつくる…」は、ファイルを Altair 8800 用の CP/M 2.2 ディスクイメージ 1 枚にまとめます。FORTRAN-80 や COBOL-80 は配布元が単体のファイルで配っているので、この機能で 1 枚にします。
+「CP/M ディスクをつくる…」 (build a CP/M disk) in the Settings window packs files into one CP/M 2.2 disk image for the Altair 8800. FORTRAN-80 and COBOL-80 are distributed as separate files, so this feature puts them on one disk.
 
-1. 設定画面の一覧で「CP/M 言語系の単体ファイル」を取り込む(取得元は一覧の「取得元」)
-2. 「CP/M ディスクをつくる…」を開き、「FORTRAN-80 一式」または「COBOL-80 一式」を押す(「ファイルを追加…」で、手持ちのファイルも足せる)
-3. 「つくる」を押すと、ユーザー追加に 1 枚のディスクとして登録される
-4. CP/M 2.2 を起動し(ドライブ A)、ユーザー追加の項目をドライブ B に装着して、`B:` に切り替えて使う(例: `F80 =HELLO`、`L80 HELLO,HELLO/N/E`)
+1. Import the 「CP/M 言語系の単体ファイル」 (CP/M language files) items in the Settings list (their sources are in the 「取得元」 links)
+2. Open 「CP/M ディスクをつくる…」 and press 「FORTRAN-80 一式」 (FORTRAN-80 set) or 「COBOL-80 一式」 (COBOL-80 set) (you can add your own files with 「ファイルを追加…」, add files)
+3. Press 「つくる」 (build), and the disk is registered as one user item
+4. Boot CP/M 2.2 (drive A), mount the user item in drive B, and switch to `B:` (for example `F80 =HELLO`, `L80 HELLO,HELLO/N/E`)
 
-もとのディスクは、取り込み済みの CP/M 2.2b を既定にしています。「もとのディスクにあるファイルを残す」をオフにすると、ファイルを全部消した空の CP/M ディスクにファイルを入れます(容量は約 296KB。シートの右上に、入れるファイルの合計が出ます)。つくったディスクの形式は、実物の CP/M 2.2b の BIOS が読み書きできることを、テストで確かめています(トラック 6 以降はセクタの形式とセクタ番号の並びが違います)。
+The source disk defaults to the imported CP/M 2.2b. If you turn off 「もとのディスクにあるファイルを残す」 (keep the files on the source disk), the files go onto an empty CP/M disk with all files removed (about 296 KB of space; the total size of the files to add is shown at the top right of the sheet). Tests confirm that the real CP/M 2.2b BIOS can read and write disks built this way (from track 6 on, the sector format and the order of sector numbers are different).
 
-テストは、ライブラリのファイルがなければ該当のものだけ自動でスキップします(`swift test`)。
+Tests that need library files are skipped automatically when the files are missing (`swift test`).
 
-## ROM
+## ROMs
 
-ROM ファイル(`8kBas_e0/e8/f0/f8.bin`、`88dskrom.bin`)の入手先は、上の「入手先」の表にあります。
+Where to get the ROM files (`8kBas_e0/e8/f0/f8.bin`, `88dskrom.bin`) is in the "Where to get them" table above.
 
-「BASIC 8K」ボタンで E000h に取り付けて実行します(RAM 32KB)。
-BASIC ROM はシリアルをポート 00h/01h(2SIO 形式)で使うため、シミュレータは 00h/01h と 10h/11h の両方を同じ端末に接続しています。
-`88dskrom.bin` はディスクブート(FF00h)用で、CP/M と Zork の起動に使います。
+The 「BASIC 8K」 button installs it at E000h and runs it (32 KB of RAM).
+The BASIC ROM uses the serial port at ports 00h/01h (2SIO style), so the simulator connects both 00h/01h and 10h/11h to the same terminal.
+`88dskrom.bin` is for booting from disk (FF00h) and is used to boot CP/M and Zork.
 
-## 速度オプション
+## Speed options
 
-端末の上のメニューで切り替えます。
+Switch them in the menus above the terminal.
 
-- CPU: `実機の速度`(実時間に合わせて実行し、遅れた分は取り戻す。0.1 秒を超える遅れは切り捨て)/ `最速`
-- シリアル: `制限なし` / 9600 / 1200 / 300 / 110 ボー(テレタイプ、11 ビット/文字)。
-  送信可ビット(ステータスの bit1)が文字の所要時間だけ下がり、BASIC などステータスを見て出力するプログラムが遅くなる
+- CPU: 「実機の速度」 (real speed: runs in step with real time and catches up when it falls behind; delays over 0.1 s are dropped) / 「最速」 (as fast as possible)
+- Serial: 「制限なし」 (unlimited) / 9600 / 1200 / 300 / 110 baud (Teletype, 11 bits per character).
+  The transmit-ready bit (bit 1 of the status) goes low for the time one character takes, so programs that check the status before output, such as BASIC, slow down
 
-## ディスクと CP/M
+## Disks and CP/M
 
-- 88-DCDD フロッピーディスクコントローラ(ポート 08h-0Ah、ドライブ A〜P)を実装しています。回転待ちは時間ではなく「セクタレジスタを読むたびに 1 セクタ進む」簡易モデルです
-- ディスクイメージは 77 トラック × 32 セクタ × 137 バイト(337,568 バイト)以上の .dsk です。配布されている .dsk は末尾に余白があります(CP/M 2.2 は 337,664 バイト)
-- 「CP/M 2.2 で起動」: ライブラリの `disks/cpm22b23-56k.dsk`(altairclone.com で入手)を `~/Library/Application Support/AltairSim/disks/` に作業用コピーとして置き、ドライブ A に装着し、88dskrom(FF00h)から起動します。RAM は 64KB。ディスクへの書き込みは作業用コピーに反映され、元のファイルは変わりません
-- 「ディスク」メニューから、ドライブ A〜D に任意の .dsk を装着・取り外しできます。この場合は選んだファイルに直接書き込まれます
-- 「CP/M 3 で起動」: ライブラリの `cpm3_v1.0_56K_disk1.dsk` をドライブ A、`cpm3_v1.0_56k_disk2.dsk` をドライブ B に装着して起動します。作業用コピーの扱いは CP/M 2.2 と同じです
-- 動作確認: CP/M 2.2b の起動、`DIR`、`PIP` によるファイルコピー(ディスク書き込み)、`MBASIC`(BASIC-80)の `PRINT 2+3`
+- An 88-DCDD floppy disk controller (ports 08h–0Ah, drives A–P) is implemented. Rotational delay is not modeled in time; it is a simple model where "each read of the sector register advances one sector"
+- Disk images are `.dsk` files of 77 tracks × 32 sectors × 137 bytes (337,568 bytes) or more. Distributed `.dsk` files have padding at the end (CP/M 2.2 is 337,664 bytes)
+- 「CP/M 2.2 で起動」 (boot CP/M 2.2): puts a working copy of `disks/cpm22b23-56k.dsk` from the library (available from altairclone.com) in `~/Library/Application Support/AltairSim/disks/`, mounts it in drive A, and boots from 88dskrom (FF00h). RAM is 64 KB. Writes to the disk go to the working copy; the original file does not change
+- From the 「ディスク」 (Disk) menu you can mount and unmount any `.dsk` in drives A–D. In that case writes go directly to the file you chose
+- 「CP/M 3 で起動」 (boot CP/M 3): mounts `cpm3_v1.0_56K_disk1.dsk` from the library in drive A and `cpm3_v1.0_56k_disk2.dsk` in drive B, and boots. Working copies are handled the same way as for CP/M 2.2
+- Checked: booting CP/M 2.2b, `DIR`, copying files with `PIP` (writing to disk), and `PRINT 2+3` in `MBASIC` (BASIC-80)
 
-## ディスクドライブ画面
+## Disk drive view
 
-パネルの下に 88-DCDD のドライブ A・B を描いています(Altair 8800 の下に積まれる青い筐体の写真をもとにした配色)。ドアをクリックするとディスクの装着(ファイル選択)と取り出しを切り替えます。装着中はスロットにスリーブとファイル名、アクセス中は IN USE ランプ、ヘッド位置は TRK で表示します。
+Drives A and B of the 88-DCDD are drawn below the panel (colored after photos of the blue cabinet stacked under an Altair 8800). Clicking a door switches between inserting a disk (choosing a file) and ejecting it. While a disk is in, the slot shows a sleeve and the file name; the IN USE lamp shows access, and TRK shows the head position.
 
-CP/M 3 の動作確認: `CP/M V3.0 Loader` から `CP/M 3 BIOS v1.0 for Altair 8" Floppy` まで起動、`DIR`、`PIP` による B ドライブへの書き込み、`MBASIC`(BASIC-80 Rev. 5.21)の `PRINT 2+3`。
+CP/M 3 checks: boots from `CP/M V3.0 Loader` through `CP/M 3 BIOS v1.0 for Altair 8" Floppy`, `DIR`, writing to drive B with `PIP`, and `PRINT 2+3` in `MBASIC` (BASIC-80 Rev. 5.21).
 
 ## Zork
 
-「Zork」ボタンで Burcon 56K CP/M 2.2 のディスク(`zork.dsk`)をドライブ A から起動します。`A>` で `ZORK1` または `ZORK2` と入力します。このディスクには `ZORK3.COM` はありますがデータファイルがなく、`Load Game Disk` の表示で止まります。
+The 「Zork」 button boots a Burcon 56K CP/M 2.2 disk (`zork.dsk`) from drive A. At `A>`, type `ZORK1` or `ZORK2`. The disk has `ZORK3.COM` but not its data file, so it stops at `Load Game Disk`.
 
-## 8080 命令テスト
+## 8080 instruction tests
 
-ライブラリの `cpu_tests/` に取り込んだ CP/M 用テストプログラムを、BDOS 呼び出し(0005h)だけを模擬するハーネスで実行します(`CPUExerciserTests`)。
+CP/M test programs imported into `cpu_tests/` in the library are run in a harness that emulates only the BDOS call (0005h) (`CPUExerciserTests`).
 
-| テスト | 結果 |
+| Test | Result |
 |---|---|
 | `TST8080.COM` | `CPU IS OPERATIONAL` |
 | `8080PRE.COM` | `8080 Preliminary tests complete` |
-| `CPUTEST.COM`(SuperSoft Diagnostic II) | `CPU TESTS OK`(255,651,553 クロック = 2MHz で約 128 秒。配布元の説明は「2MHz で約 2 分」) |
-| `8080EXM.COM`(全命令・フラグを CRC で照合) | 25 項目すべて `PASS`(23,803,378,391 クロック = 2MHz で約 3.3 時間分、リリースビルドで約 318 秒) |
+| `CPUTEST.COM` (SuperSoft Diagnostic II) | `CPU TESTS OK` (255,651,553 clocks = about 128 seconds at 2 MHz; the distributor's description says "about 2 minutes at 2 MHz") |
+| `8080EXM.COM` (checks every instruction and flag by CRC) | all 25 items `PASS` (23,803,378,391 clocks = about 3.3 hours at 2 MHz; about 318 seconds in a release build) |
 
-8080EXM は時間がかかるので、環境変数を付けたときだけ実行します。
+8080EXM takes a long time, so it runs only when an environment variable is set.
 
 ```bash
 RUN_8080EXM=1 swift test -c release -Xswiftc -enable-testing --filter CPUExerciserTests/test8080EXM
 ```
 
-## HLT の動作
+## How HLT behaves
 
-Intel 8080 データシート(2-13〜2-14 ページ、Table 2-1)に合わせています。
+It follows the Intel 8080 data sheet (pages 2-13 to 2-14, Table 2-1).
 
-- HLT を実行すると停止状態(HLTA)に入り、RUN スイッチは RUN のまま、HLTA が点灯、WAIT は消灯します。アドレス LED は HLT の次の番地、ステータスは HLTA + MEMR + WO(M1 は消灯)です
-- 抜けられるのは RESET(PC = 0)と、INTE が 1 のときの割り込みだけです。STOP → RUN や SINGLE STEP では解除されません
-- DI の後の HLT は RESET でしか抜けられません
-- 割り込みを起こすスイッチは実機のパネルにないので、内部関数(`AltairMachine.requestInterrupt`)としてテストから使えるようにしています。HOLD は未実装です
-- データ LED は、HLT 命令の値(76h)のままです。実機では M2 サイクルの途中でデータバスがフローティングになるため、パネルでの見え方は確認していません
+- Executing HLT enters the halted state (HLTA): the RUN switch stays at RUN, HLTA lights and WAIT goes out. The address LEDs show the address after the HLT, and the status is HLTA + MEMR + WO (M1 off)
+- The only ways out are RESET (PC = 0) and an interrupt while INTE is 1. STOP → RUN and SINGLE STEP do not release it
+- HLT after DI can only be left with RESET
+- The real panel has no switch that raises an interrupt, so it is exposed as an internal function (`AltairMachine.requestInterrupt`) for tests. HOLD is not implemented
+- The data LEDs keep the value of the HLT instruction (76h). On the real machine the data bus floats partway through the M2 cycle, so how the panel looks there has not been confirmed
 
-## 削除キー
+## Delete key
 
-端末の削除キーは、起動するプログラムに合わせて送るコードを切り替えます(端末の設定「削除キー」で変更もできます)。
+What the terminal's delete key sends depends on the program being run (it can also be changed with the terminal's 「削除キー」 (delete key) setting).
 
-| 設定 | コード | 使い所 |
+| Setting | Code | Used for |
 |---|---|---|
-| BS(^H) | 08h | CP/M(既定)。「BS-SP-BS」で画面上の文字を消す |
-| DEL(7F) | 7Fh | CP/M は削除した文字をそのままエコーする(ハードコピー端末向け)。Altair BASIC は `\9\` のように表示する |
-| _(Altair BASIC) | 5Fh | Altair BASIC(「BASIC 8K」を起動すると自動で選ぶ)。BASIC は削除した上で `_` を表示する |
+| BS (^H) | 08h | CP/M (default). Erases the character on screen with BS-SP-BS |
+| DEL (7F) | 7Fh | CP/M echoes the deleted character as is (meant for hard-copy terminals). Altair BASIC shows it like `\9\` |
+| _ (Altair BASIC) | 5Fh | Altair BASIC (chosen automatically when 「BASIC 8K」 starts). BASIC deletes the character and shows `_` |
 
-Mac の delete キーは SwiftUI の `.delete` と一致せず、U+007F の文字として届くため、文字で判定しています。fn + delete(前方削除)は ADM-3A の RUB OUT にあたる 7Fh を送ります。
+The Mac's delete key does not match SwiftUI's `.delete` and arrives as the character U+007F, so it is detected by character. fn + delete (forward delete) sends 7Fh, which corresponds to the ADM-3A's RUB OUT.
 
-## 16 進入力
+## Hex input
 
-ツールバーの下に 2 つの入力欄があります。
+There are two input fields below the toolbar.
 
-- スイッチ: アドレススイッチ(A15〜A0)を 16 進で設定します(例: `FF00`)。スイッチを手で動かすと、欄の値も追従します
-- 書き込み: `番地: バイト列` の形(例: `0000: 3E 01 76`)で RAM に書き込みます。パネルの EXAMINE → DEPOSIT → DEPOSIT NEXT … と同じ手順で、書き込み後は先頭番地を EXAMINE した状態になります。実行中は STOP してから書き込みます。RAM でない番地(ROM や未実装領域)は書き込まれません
+- Switches: sets the address switches (A15–A0) in hex (for example `FF00`). When you move the switches by hand, the field follows
+- Write: writes to RAM in the form `address: bytes` (for example `0000: 3E 01 76`). It follows the same steps as EXAMINE → DEPOSIT → DEPOSIT NEXT … on the panel, and after writing, the start address is left EXAMINEd. While running, it STOPs before writing. Addresses that are not RAM (ROM or unpopulated areas) are not written
 
-## 端末(80 桁 × 24 行)
+## Terminal (80 columns × 24 lines)
 
-端末は 80 × 24 の画面バッファを持ち、次の制御を解釈します。
+The terminal has an 80 × 24 screen buffer and understands the following controls.
 
-- 制御文字: CR、LF(最下行でスクロール)、BS(カーソルを戻すだけ。文字は消えない。CP/M の BS-SP-BS で消える)、TAB。DEL(7Fh)などは無視します
-- ANSI(VT100 系): `ESC [ H` `f`(位置指定)、`A B C D`(移動)、`J`(画面消去)、`K`(行消去)、`L M`(行挿入・削除)。`m`(文字属性)は無視します
-- ADM-3A: `ESC = 行 桁`(位置指定)、1Eh(ホーム)、1Ah(画面消去)
+- Control characters: CR, LF (scrolls at the bottom line), BS (only moves the cursor back; the character is not erased; CP/M's BS-SP-BS erases it), TAB. DEL (7Fh) and others are ignored
+- ANSI (VT100 family): `ESC [ H` `f` (cursor position), `A B C D` (cursor movement), `J` (erase screen), `K` (erase line), `L M` (insert/delete line). `m` (character attributes) is ignored
+- ADM-3A: `ESC = row column` (cursor position), 1Eh (home), 1Ah (clear screen)
 
-WM(WORDMASTER、CP/M 2.2 ディスクに入っている画面エディタ)が ANSI のシーケンスで画面を制御するため、この解釈が必要でした。
+This was needed because WM (WORDMASTER, a screen editor on the CP/M 2.2 disk) controls the screen with ANSI sequences.
 
-## Altair 680b(Motorola 6800)
+## Altair 680b (Motorola 6800)
 
-ウィンドウ左上の「機種」で Altair 8800 と Altair 680b を切り替えます。端末(ADM-3A 風)は共用です。
+Switch between the Altair 8800 and the Altair 680b with 「機種」 (machine) at the top left of the window. The terminal (ADM-3A style) is shared.
 
-- CPU: MC6800(`CPU6800`)。全命令、IRQ・NMI・SWI・WAI、クロック数つき。未定義のオペコードは 2 クロックの NOP として数えます(`illegalCount`)
-- クロック: 500kHz
-- メモリ: RAM 8KB、ACIA(6850)が F000(制御・状態)と F001(データ)、ストラップが F002、PROM モニタが FF00〜FFFF(680b の MON680.S19)
-- パネル: AC / HLT / RUN の LED、アドレス LED(A15〜A0)、データ LED(D7〜D0)、各スイッチ、RESET、HLT-RUN、DEP。EXAMINE はなく、HALT 中はアドレススイッチの番地の中身がデータ LED に出ます
-- 「モニタ起動」: 「.」のプロンプトが出ます。`M 0010` で表示と書き込み、`N` で次の番地、`J 0020` で実行、`L` で S レコードの読み込み
-- 「BASIC を読み込んで起動」: 紙テープ版 BASIC を、モニタの `L` コマンドで読み込み、`J 0000` で起動します。`MEMORY SIZE?` は Return、`TERMINAL WIDTH?` は Return、`WANT SIN-COS-TAN-ATN?` は N
-- 「端末なし(フロントパネル運用)」: ストラップを「端末なし」にして、リセット後に 0000 番地から実行します。スイッチで書いたプログラムを走らせる構成です
+- CPU: MC6800 (`CPU6800`). Every instruction, IRQ, NMI, SWI and WAI, with clock counts. Undefined opcodes are counted as 2-clock NOPs (`illegalCount`)
+- Clock: 500 kHz
+- Memory: 8 KB of RAM, an ACIA (6850) at F000 (control/status) and F001 (data), straps at F002, and the PROM monitor at FF00–FFFF (the 680b's MON680.S19)
+- Panel: the AC / HLT / RUN LEDs, address LEDs (A15–A0), data LEDs (D7–D0), the switches, RESET, HLT-RUN and DEP. There is no EXAMINE; while halted, the contents of the address on the address switches appear on the data LEDs
+- 「モニタ起動」 (start monitor): the "." prompt appears. `M 0010` displays and writes memory, `N` goes to the next address, `J 0020` runs, `L` loads S-records
+- 「BASIC を読み込んで起動」 (load and start BASIC): loads the paper-tape BASIC with the monitor's `L` command and starts it with `J 0000`. Press Return for `MEMORY SIZE?` and `TERMINAL WIDTH?`, and answer N to `WANT SIN-COS-TAN-ATN?`
+- 「端末なし(フロントパネル運用)」 (no terminal, front-panel operation): sets the straps to "no terminal" and runs from address 0000 after reset. This is the setup for running a program entered with the switches
 
-動作確認: モニタ、BASIC の読み込みと起動、`PRINT 6*7`(42)、FOR ループ、`PRINT 100/7`(14.2857)。
+Checked: the monitor, loading and starting BASIC, `PRINT 6*7` (42), a FOR loop, `PRINT 100/7` (14.2857).
 
-クロック: 500kHz(1 クロック 2 マイクロ秒)。680b の Theory of Operation で確認(2MHz の水晶を 4 分周)。未確認: 680 と 680b の差、パネルの色・配置の細部、定番の CPU テスト(見つかっていない)。
+Clock: 500 kHz (2 microseconds per clock), confirmed in the 680b Theory of Operation (a 2 MHz crystal divided by 4). Not yet confirmed: the differences between the 680 and the 680b, details of the panel's colors and layout, and a standard CPU test (none found).
 
-## 6800 の機能テストプログラム
+## 6800 functional test program
 
-`Tools/gen6800_functional_test.py` が、MC6800 の全オペコード(WAI を除く 196 個)・全アドレッシングモードを実行して結果を照合する、6800 の機械語のプログラムを作ります。
+`Tools/gen6800_functional_test.py` generates a 6800 machine-code program that executes every MC6800 opcode (196, excluding WAI) in every addressing mode and checks the results.
 
-- 1 ケース = 1 命令と、その入力(A、B、X、CC、メモリ、スタックの内容)。2,660 ケース(命令ごとに 12 通り。DAA は上位・下位ニブルの種類と H・C の全組み合わせで 320 通り)
-- プログラムは、各ケースを実行する前に RTI でレジスタと CC を一度に設定し(フラグを壊さない)、実行後の A、B、X、SP、CC、メモリ 4 バイト、スタック 16 バイトを集めて、16 ビットのチェックサムを、期待値と比べます。不一致のケースは、位置と実際の状態を先頭 32 件まで記録します
-- 期待値は、同じファイルの参照モデル(Python)が計算します。命令の意味を「整数演算の定義」(符号つきの範囲を超えたら V、符号なしで借りたら C)で書いてあり、CPU 実装(ビット演算)とは別の書き方です
-- 生成物: `Tests/Resources/6800/functional6800.s19`(プログラムとデータ)、`functional6800.txt`(各ケースの内容と期待状態)、`functional6800.json`
-- 実行: `CPU6800FunctionalTests`(約 1,150 万クロック)。生成し直すには `python3 Tools/gen6800_functional_test.py`
+- One case = one instruction and its inputs (the contents of A, B, X, CC, memory and the stack). 2,660 cases (12 per instruction; DAA has 320, covering the kinds of upper and lower nibble and every combination of H and C)
+- Before each case, the program sets the registers and CC all at once with RTI (so the flags are not disturbed). After executing, it gathers A, B, X, SP, CC, 4 bytes of memory and 16 bytes of stack, and compares a 16-bit checksum with the expected value. For mismatching cases, it records the position and the actual state of up to the first 32
+- The expected values are computed by a reference model (Python) in the same file. It describes each instruction by "the definition of integer arithmetic" (V when the signed range is exceeded, C on an unsigned borrow), which is a different way of writing it from the CPU implementation (bit operations)
+- Output: `Tests/Resources/6800/functional6800.s19` (program and data), `functional6800.txt` (each case and its expected state), `functional6800.json`
+- Run: `CPU6800FunctionalTests` (about 11.5 million clocks). To regenerate, run `python3 Tools/gen6800_functional_test.py`
 
-確認したこと: CPU は全ケースで一致。CPU に 10 通りのバグ(ROL の V、DAA、ADD の H、SBC の C、JSR のスタック順、CPX の V、INX の Z、BGT、TAP の I、NEG の C)を入れて、すべて検出されること。
+Confirmed: the CPU matches in every case. Ten kinds of bugs were planted in the CPU (V of ROL, DAA, H of ADD, C of SBC, the stack order of JSR, V of CPX, Z of INX, BGT, I of TAP, C of NEG), and all of them were detected.
 
-限界: 参照モデルと CPU の実装は同じ人(私)が書いたので、同じ思い違いは見つけられません。実機や別のエミュレータとの照合はしていません(プログラム自体は 6800 の機械語なので、別の環境でも動かせます)。DAA の不正な BCD 入力、V の「未定義」の扱い(DAA は V をマスク)、WAI と割り込みは対象外です。
+Limits: the reference model and the CPU were written by the same person (me), so a misunderstanding shared by both cannot be found. Nothing was compared against real hardware or another emulator (the program itself is 6800 machine code, so it can be run elsewhere). Invalid BCD input to DAA, the "undefined" handling of V (DAA masks V), and WAI and interrupts are out of scope.
 
-## Altair 680b のディスク(68-UIO と FD3712)
+## Altair 680b disks (68-UIO and FD3712)
 
-- 680b にも 8800 と同じ形で、ディスクコントローラとドライブ A〜D(2 台入り × 2 段)の画面があります。ディスクの装着・取り外しのしくみ(`DiskSubsystem`)と、ドライブの絵は共通です
-- 68-UIO ボード: F006/F007 に 2 つ目の ACIA(端末はつながっていない)、F008〜F00F に MC6821 の PIA が 2 つ(`PIA6821`)。PIA のレジスタは、アドレスの最下位ビットが反転した配線(F008 = 制御 A、F009 = データ A、F00A = 制御 B、F00B = データ B)
-- Pertec FD3712(`FD3712Controller`): PIA #1 のポート A がステータス/データの入力(論理が反転)、ポート B がコマンド出力、PIA #2 のポート B がデータ出力。実行のストローブは、データ出力側の CB2 とデータ入力側の CA2 のハンドシェイク(PIA の自動ハンドシェイク)の OR。コマンドは、リセット(81)、ドライブ/セクタ設定(21)、トラック設定(11)、シーク(09)、トラック 0 へ復帰(0D)、読み出し(03)、書き込み(05)、CRC 検証(07)、書き込みバッファ(31)、読み出しバッファ(41)、エラー消去(0B)
-- ディスクは IBM 3740 形式(77 トラック × 26 セクタ × 128 バイト = 256,256 バイト)。回転位置は持たず、コマンドごとの所要時間(ビジー)で近似しています
-- 動作確認: FLEX の起動 PROM(BOOT.ASM)とディスクドライバ(DSKDRV.ASM)が使うレジスタ操作の手順を、そのまま Swift で書き写したテスト(`FD3712Tests`)で、読み出し、シーク、書き込み、ドライブ 2 台、未接続、書き込み禁止、ビジーの時間を確認
-アプリを起動した直後は、8800 も 680b も電源オフです(全ランプ消灯)。電源は機種ごとに独立していて、機種タブを切り替えても、もう一方の電源や端末の画面はそのまま残ります。8800 は、パネルの POWER スイッチを入れるか、「CP/M 2.2」などの起動ボタンを押して始めます(RUN スイッチは実機と同じく自分で操作します)。680b は、電源を入れると PROM モニタが起動して「.」プロンプトが出ます。
-- 動作確認(本物の起動 PROM と、配布のディスクイメージで): 「FLEX 3.0」は `6800 FLEX V3.0` が起動して `DATE (MM,DD,YY)?` を聞き、`CAT` でファイル一覧(SAVE、PCGET、…、BASIC、CC、WC など、残り 493 セクタ)が出ます。「CP/68」は `HEMENWAY ASSOCIATES CP/68-1.0` が起動して、`DIR` で INIT、LINK、PIP、CP68.SYS などが出ます。FLEX では、ディスクに入っている `BASIC.CMD`(59 セクタ)も動きます(`BASIC` と打つと `READY`、`PRINT 2+3` が 5、FOR ループが `1  4  9  16  25`)。FLEX BASIC では `SAVE "SQUARES"` でディスクに保存し、`NEW` のあと `LOAD "SQUARES"` で読み戻せます(`SQUARES.BAS` が FLEX のディレクトリに載ります)。ディスクへの書き込みは、ディスク操作が止まって約 1.5 秒後に作業コピー(`~/Library/Application Support/AltairSim/disks/`)へ自動で書き戻されるので、アプリを閉じても残ります。CP/68 では `PIP COPY1.SYS=CP68.SYS` でディスクへの書き込みを確かめ、書いたファイルを `COPY2.SYS=COPY1.SYS` で読み戻せます(PIP は一度起動すると `PIP-` のプロンプトに入ったままになります。抜け方は資料がなく未確認です)。SAVE したファイルは、別の機械で起動し直しても `CAT` に残り `LOAD` できることをテストで確認しています。FD3712 の待ち時間(読み書き約 6.4ms、シークは1トラック 1ms)はデータシートからの近似で、実機での実測値とは照合できていません。680b の電源スイッチは実機では背面パネルにある(取扱説明書 p.14)ので、前面パネルには付けず、画面左側のボタン列の「電源(背面)」で切り替えます。OFF で全ランプが消えて CPU が止まり、ON にすると AC ランプが点いて、PROM モニタが起動します。どちらも起動 PROM(`altair680/boot/BOOT.S19`)、SWIMON、68-UIO、RAM 48KB、ドライブ A のディスクで、モニタの `J FC00` から起動します
-- 配布の FLEX 3.0 のイメージは、ブートローダ(トラック 0 の物理セクタ 1 の 5・6 バイト目)にシステムファイル(FLEX3.SYS)の位置が書かれていません(LINK.CMD を実行する前の状態)。このままでは、ローダがトラック 0 セクタ 0 を読もうとして起動をやり直し続けます。「FLEX 3.0」ボタンは、作業用コピーに LINK と同じ処理(`FLEXImage.linkBootLoader`。ディレクトリから FLEX3.SYS のトラック 17・セクタ 12 を探して書く)を行ってから起動します。元のイメージは変えません
-- ドライブのラベル、作業用コピーの扱い(`~/Library/Application Support/AltairSim/disks/`)は、8800 のディスクと同じです
+- The 680b, like the 8800, has a disk controller and a view of drives A–D (two drives per cabinet × 2 stacked). The mount/unmount mechanism (`DiskSubsystem`) and the drive drawing are shared
+- 68-UIO board: a second ACIA at F006/F007 (no terminal attached), and two MC6821 PIAs at F008–F00F (`PIA6821`). The PIA registers are wired with the lowest address bit inverted (F008 = control A, F009 = data A, F00A = control B, F00B = data B)
+- Pertec FD3712 (`FD3712Controller`): port A of PIA #1 is the status/data input (inverted logic), port B is the command output, and port B of PIA #2 is the data output. The execute strobe is the OR of the handshake between CB2 on the data-output side and CA2 on the data-input side (the PIA's automatic handshake). Commands: reset (81), set drive/sector (21), set track (11), seek (09), return to track 0 (0D), read (03), write (05), verify CRC (07), write buffer (31), read buffer (41), clear error (0B)
+- Disks are IBM 3740 format (77 tracks × 26 sectors × 128 bytes = 256,256 bytes). There is no rotational position; each command is approximated by the time it takes (busy)
+- Checked: a test (`FD3712Tests`) that copies into Swift the register operations used by the FLEX boot PROM (BOOT.ASM) and disk driver (DSKDRV.ASM) confirms reading, seeking, writing, two drives, an unconnected drive, write protect and busy time
 
-## ライセンス
+Right after the app starts, both the 8800 and the 680b are powered off (all lamps out). Each machine has its own power, so switching machine tabs leaves the other machine's power and terminal screen as they were. Start the 8800 with the POWER switch on the panel or with a boot button such as 「CP/M 2.2」. After the POWER switch, you operate the RUN switch yourself, as on the real machine. The boot buttons (「BASIC 8K」, 「CP/M 2.2」, 「CP/M 3」, 「Zork」) power on and run from the boot address. When the 680b is powered on, the PROM monitor starts and shows the "." prompt.
 
-このリポジトリのソースコードとドキュメントは [MIT License](LICENSE) です。ROM、ディスクイメージ、8080 テストプログラムなど、取り込んで使うファイルは対象外で、それぞれの配布元の条件に従います。
+- Checked with the real boot PROM and the distributed disk images: 「FLEX 3.0」 boots `6800 FLEX V3.0`, asks `DATE (MM,DD,YY)?`, and `CAT` lists the files (SAVE, PCGET, …, BASIC, CC, WC and others, 493 sectors left). 「CP/68」 boots `HEMENWAY ASSOCIATES CP/68-1.0`, and `DIR` lists INIT, LINK, PIP, CP68.SYS and others. On FLEX, the `BASIC.CMD` on the disk (59 sectors) also runs (typing `BASIC` gives `READY`, `PRINT 2+3` gives 5, and a FOR loop gives `1  4  9  16  25`). In FLEX BASIC, `SAVE "SQUARES"` saves to disk, and after `NEW`, `LOAD "SQUARES"` reads it back (`SQUARES.BAS` appears in the FLEX directory). Disk writes are written back automatically to the working copy (`~/Library/Application Support/AltairSim/disks/`) about 1.5 seconds after disk activity stops, so they remain after the app is closed. On CP/68, `PIP COPY1.SYS=CP68.SYS` confirmed writing to disk, and the written file could be read back with `COPY2.SYS=COPY1.SYS` (once started, PIP stays at its `PIP-` prompt; how to leave it is not documented and has not been confirmed). Tests confirm that a SAVEd file remains in `CAT` and can be `LOAD`ed after rebooting on another machine instance. The FD3712 wait times (about 6.4 ms for a read or write, 1 ms per track for a seek) are approximations from the data sheet and have not been compared with measurements on real hardware. On the real 680b the power switch is on the back panel (Operator's Manual p.14), so it is not on the front panel; it is switched with 「電源(背面)」 (power, rear) in the button column on the left of the window. OFF turns off all lamps and stops the CPU; ON lights the AC lamp and starts the PROM monitor. Both use the boot PROM (`altair680/boot/BOOT.S19`), SWIMON, the 68-UIO, 48 KB of RAM and the disk in drive A, and boot with the monitor's `J FC00`
+- In the distributed FLEX 3.0 image, the boot loader (bytes 5 and 6 of physical sector 1 on track 0) does not contain the location of the system file (FLEX3.SYS) (the state before LINK.CMD is run). As is, the loader tries to read track 0 sector 0 and keeps restarting the boot. The 「FLEX 3.0」 button does the same thing as LINK on the working copy (`FLEXImage.linkBootLoader`, which finds FLEX3.SYS at track 17, sector 12 in the directory and writes it) before booting. The original image is not changed
+- Drive labels and the handling of working copies (`~/Library/Application Support/AltairSim/disks/`) are the same as for the 8800 disks
+
+## License
+
+The source code and documentation in this repository are under the [MIT License](LICENSE). Files you import and use, such as ROMs, disk images and 8080 test programs, are not covered; each follows its distributor's terms.

@@ -1,0 +1,269 @@
+# Altair 8800 Simulator (Swift / macOS)
+
+[English](README.md) | **日本語** | [Web サイト](https://masakai.github.io/AltairSim/)
+
+Intel 8080 搭載の Altair 8800(1975年)のシミュレータ。
+
+[![AltairSim 紹介動画(23秒、ナレーション付き)](docs/media/altairsim.jpg)](docs/media/altairsim.mp4)
+
+Altair 8800、Altair 680b、IMSAI 8080 を、実機のフロントパネルと端末つきで動かします(動画は 23 秒、ナレーション付き。画像をクリックすると再生します)。
+
+紹介ページ(英語・日本語、英語ナレーションの動画もあります): https://masakai.github.io/AltairSim/
+
+## 実行
+
+```bash
+swift run AltairSim   # アプリ起動
+swift test            # CPU・パネル・ローダーのテスト
+```
+
+### アプリ(.app)として使う
+
+```bash
+Tools/make_app.sh              # build/AltairSim.app を作る(いまのマシンの向きだけ)
+Tools/make_app.sh --universal  # Apple シリコンと Intel の両方に対応
+Tools/make_app.sh --install    # 作成後に ~/Applications へコピーする
+```
+
+`build/AltairSim.app` ができます(Dock のアイコンは `Tools/make_icon.py` で描いています)。署名はアドホック(自分のマシンで使う前提)で、公証はしていません。他のマシンへ配る場合は、Developer ID での署名と公証が別途必要です。Bundle ID は環境変数 `BUNDLE_ID`(既定 `local.altairsim`)、バージョンは `VERSION`(既定 1.0)で変えられます。
+
+ROM・ディスクイメージはアプリに含まれていないので、初回は設定(⌘,)から取り込みます(下の「ROM・ディスクイメージの取り込み」)。取り込んだファイルは `~/Library/Application Support/AltairSim/library/` にあり、`swift run` で起動した場合と共通です。
+
+## 構成
+
+- `Sources/AltairCore`: 8080 CPU(全命令、クロック数つき)、64KB メモリ、2SIO 相当のシリアル(ポート 10h/11h)、センススイッチ(ポート FFh)、Intel HEX ローダー
+- `Sources/AltairSim`: SwiftUI のフロントパネル(A0-A15 スイッチ、アドレス/データ LED、EXAMINE/DEPOSIT/RUN/STEP/RESET)と端末
+
+## 使い方
+
+- 「デモを読み込む」→ HELLO / ECHO を 0000 に配置、RUN/STOP で実行
+- 手入力: アドレススイッチを設定して EXAMINE、データを設定して DEPOSIT NEXT を繰り返す
+- BASIC 等は手元のイメージ(`.bin` は 0000 に配置、`.hex` はレコードのアドレスに配置)を「ファイルを読み込む」で読み込み、RESET → RUN
+
+## IMSAI 8080
+
+機種切り替えの「IMSAI 8080」で、IMSAI 8080 を動かします(8080 と S-100 バスは Altair 8800 と同じで、パネル、シリアルボード、フロッピーが違います)。CPU とメモリは Altair 8800 と共通です。
+
+- **フロントパネル(CP-A):** 実機の写真と CP-A のマニュアルをもとに描いています。左上にプログラム出力 LED(8)、ステータスバイト LED(MEMR、INP、M1、OUT、HLTA、STACK、WO、INTA の 8)、アドレス LED A15〜A8 とパドル 8 個。中央にデータバス LED、アドレス LED A7〜A0 とパドル 8 個(データスイッチも兼ねる)。右に INTERRUPT ENABLED、RUN、WAIT、HOLD の LED と、制御用のパドル 6 個(EXAMINE/EXAMINE NEXT、DEPOSIT/DEPOSIT NEXT、RESET/EXT CLR、RUN/STOP、SINGLE STEP、PWR ON/OFF)です。パドルは上半分と下半分で動作が決まり、青と赤で色分けされています。
+- **I/O ポート:** `02/03` と `04/05` が SIO-2 のチャンネル A と B(データ/ステータス、8251 と同じビット配置)、`FD` が FIF フロッピー、`FF` が入力 = 上位アドレススイッチ(A8〜A15)・出力 = プログラム出力 LED(反転して点灯)です。
+- **FIF フロッピー:** IMSAI のフロッピーインタフェースは、ボード上の 8080 がファームウェア(`fifware.asm`)を実行して、メモリ上の 7 バイトのコマンド列を読み、結果をステータスバイトに書き戻します。このシミュレータは、ファームウェアの 8080 は動かさずに、ホストから見える動作(コマンド列の検査とエラーコード C1〜C6・A1〜A3・93、読み出し、書き込み、トラックのフォーマット、所要時間の近似)を再現しています。ディスクは IBM 3740 形式(77 トラック × 26 セクタ × 128 バイト = 256,256 バイト)で、680b と同じです。FIF は、未フォーマットのセクタを読めず(93)、書き込みかトラックのフォーマット(機能 3)で存在するようになります。
+- **起動:** 「CP/M 1.31」ボタンは、ドライブ A に IMSAI CP/M 1.31 のディスクを入れて電源を入れ、FIF のブート(起動セクタをメモリの 0 番地へ読んで実行)を再現します。`DIR` で PIP、STAT、ED、DDT、ASM などが出て、`PIP COPY.COM=STAT.COM` でディスクに書き込めます。
+- **新規の空ディスク:** 「ディスク」メニューの「ドライブ X に新規の空ディスク(フォーマット済み)を作成…」は、IMSAI ではフォーマット済みの空ディスクを作ります(トラック 2 の CP/M ディレクトリだけ E5 で埋め、残りは 0)。IMSAI CP/M 1.31 には、ディスクをフォーマットする機能がないからです。ユーザーガイド(6.6 SYSGEN の項)に、新しいディスクは初期化なしで使う前提だとあり、IMDOS 付属の `FORMAT.COM`(IMSAI FORMATTER-INITIALIZER 2.05)を CP/M 1.31 で動かすと「INCOMPATIBLE VERSION OF SYSTEM / FORMAT ABORTED」で中止することを、テストで確かめました。ドライブ B に入れて `B:`、`DIR`(`NOT FOUND` = 空)、`A:PIP B:STAT2.COM=A:STAT.COM`、`DIR`、`STAT2` まで、画面で確かめています。
+- **ディスクイメージ:** 設定画面の一覧に、IMSAI 8080 用のディスクが 10 件あります(取得元のリンクつき)。CP/M 1.31(16K)は deramp.com、そのほかは z80pack のミラー([icl1900.co.uk/unix4fun/z80pack/ftp/imsai/](https://www.icl1900.co.uk/unix4fun/z80pack/ftp/imsai/readme.txt))の `.tgz` です。CP/M 1.33(52K、Udo Munk による復元)、CP/M 2.2(54K)、Fig-Forth(CP/M 2.2 上)、IMDOS 2.02(54K)、IMDOS 2.05 rev.0(54K、ディスク 2 枚)、IMDOS 2.05 rev.1(16K、Maslin 版と Peters 版)、IMDOS の `FORMAT.COM` です。`.tgz` は展開せずに、そのまま「ファイル・フォルダを取り込み…」へ渡せます(アプリが一時フォルダへ展開し、中の `.dsk` を名前で判別して、取り込み後に一時フォルダを消します)。「ほかの OS で起動」メニューには、取り込んだシステムディスクだけが選べます。
+- **起動を確かめたもの:** CP/M 1.31(16K)、CP/M 1.33(52K)、CP/M 2.2(54K)、Fig-Forth、IMDOS 2.02、IMDOS 2.05 rev.0、IMDOS 2.05 rev.1(2 種)は、FIF のブートで起動し、`DIR` が動くことを確かめました(自動テスト `testOtherIMSAISystemDisksBoot`。CP/M 1.31 だけは、アプリの画面でも確認しています)。UCSD p-System IV(`ucsd-iv.tgz`)は、起動しても出力がなく、原因は調べていません。
+
+画面で確認した範囲は、起動(「IMSAI 16K CP/M VERS 1.31」と `A>`)、`DIR`、パネルの手入力(アドレススイッチ、EXAMINE、データスイッチ、DEPOSIT、DEPOSIT NEXT、RUN、プログラム出力 LED、HLT での停止)です。自動テスト(`IMSAITests`)では、起動、`DIR`、`PIP` でのコピー、`STAT`、FIF のコマンド(未フォーマットのセクタ、トラックのフォーマット、書き込みと読み出し、エラーコード、書き込み禁止)、ポート FF、SIO-2、EXAMINE と DEPOSIT を確かめています。
+
+未確認のこと: IMSAI のパネルの INTA と HOLD の LED は常に消灯です(割り込み応答と HOLD は未実装)。FIF のファームウェアが返す A1〜A3 と C1〜C6 以外のエラーコード(91、92、94〜97)は再現していません。IMDOS、IMSAI の BASIC、VIO(ビデオ)は対象外です。SIO-2 のボーレートやモード設定は読み捨てています。
+
+## ROM・ディスクイメージの取り込み
+
+ROM、ディスクイメージ、8080 テストプログラムは、配布元のライセンスの都合で**このリポジトリにもアプリにも含めていません**。使うには、ご自身で配布元の条件を確認して取得し、アプリに取り込みます。
+
+1. メニュー「AltairSim ▸ 設定…」(⌘,)を開きます
+2. 一覧の各項目の「取得元」リンクからファイルを入手します(一覧には項目ごとの想定サイズも出ます)
+3. 「ファイル・フォルダを取り込み…」で複数のファイルやフォルダをまとめて選ぶか、一覧へドラッグします。ファイル名で項目を判別します。名前が違うファイルは、項目の「取り込み…」で指定して取り込めます
+4. 取り込み済みの項目は緑のチェックになります
+
+取り込んだファイルは `~/Library/Application Support/AltairSim/library/` にコピーされます(環境変数 `ALTAIR_LIBRARY` で場所を変えられます。テスト用です)。ファイルがない機能のボタンを押すと、足りないファイル名を状態欄に出して設定画面を開きます。サイズが想定と違うファイルも取り込みますが、警告を出します。ライブラリ内の置き場所の一覧は [docs/library.md](docs/library.md) にあります。
+
+### 入手先
+
+ファイルごとの正確な取得元 URL は、設定画面の一覧(「取得元」リンク)と `Sources/AltairCore/AssetLibrary.swift` の `catalog` にあります。URL は 2026-10 時点のものです。
+
+| 機種・用途 | ファイル | 探す場所 |
+|---|---|---|
+| Altair 8800 | Altair BASIC 8K ROM(`8kBas_e0/e8/f0/f8.bin`) | [altairclone.com/downloads/roms/8K BASIC/](https://altairclone.com/downloads/roms/8K%20BASIC/) |
+| Altair 8800 | ディスクブートローダ(`88dskrom.bin`) | [github.com/tommojphillips/Altair8800](https://github.com/tommojphillips/Altair8800/tree/master/roms) の `roms/` |
+| Altair 8800 | CP/M 2.2b、CP/M 3、Zork、BASIC コンパイラ、BDS C、FORTRAN-80、COBOL-80 | [altairclone.com/downloads/cpm/](https://altairclone.com/downloads/cpm/) の下の各フォルダ |
+| Altair 8800 | Altair DOS 用 FORTRAN 2.8 | [altairclone.com/downloads/altair_dos/](https://altairclone.com/downloads/altair_dos/) |
+| 8080 命令テスト | `TST8080.COM` `8080PRE.COM` `CPUTEST.COM` `8080EXM.COM` | [github.com/superzazu/8080](https://github.com/superzazu/8080/tree/master/cpu_tests) の `cpu_tests/` |
+| Altair 680b | PROM モニタ(`MON680.S19`、`SWIMON.S19`)、BASIC、起動 PROM(`BOOT.S19`)、FLEX 3.0、CP/68 | [deramp.com/downloads/altair/software/altair_680/](https://deramp.com/downloads/altair/software/altair_680/) の下の各フォルダ |
+| IMSAI 8080 | CP/M 1.31(`imsai-cpm13.dsk`)、IMDOS の `FORMAT.COM` | [deramp.com の IMSAI ソフトウェア](https://deramp.com/downloads/mfe_archive/010-S100%20Computers%20and%20Boards/00-Imsai/40-Imsai%20Software/) の `IMSAI CPM/` と `IMDOS/` |
+| IMSAI 8080 | CP/M 1.33、CP/M 2.2、Fig-Forth、IMDOS 2.02 / 2.05(`.tgz`) | z80pack のミラー [icl1900.co.uk/unix4fun/z80pack/ftp/imsai/](https://www.icl1900.co.uk/unix4fun/z80pack/ftp/imsai/readme.txt) |
+
+altairclone.com で配られているファイルの一覧は [docs/altairclone-downloads.md](docs/altairclone-downloads.md) にまとめています。
+
+### 未フォーマットの空ディスク
+
+「ディスク」メニューの「ドライブ X に新規の空ディスク(未フォーマット)を作成…」で、保存先を決めて空のイメージ(全バイト 0)を作り、そのドライブへ装着します。ゲスト OS のフォーマット用ツールでフォーマットして使います。
+
+| 機種 | フォーマット用ツール | 未フォーマットを読んだとき |
+|---|---|---|
+| 8800(CP/M) | `AFORMAT B:`(CP/M 2.2 のディスクに入っている) | `Bdos Err On B: Bad Sector` |
+| 680b(FLEX 3.0) | `NEWDISK 1` | ディスクエラー |
+| 680b(CP/68) | `INIT 1`(確認に `Y`) | `FORMAT ERROR` |
+
+- 680b(FD3712)は、セクタごとに「フォーマット済みか」を記録します。未フォーマットのセクタは読み出しがエラーになり、書き込むと存在するようになります。記録はイメージの隣の `<名前>.dsk.fmt` に保存します(全セクタがそろうと消えます)。
+- 8800(88-DCDD)は、ヘッダを書いていない生のセクタを CP/M のヘッダ検査が弾くので、記録は使いません。
+- 確認の範囲(いずれもアプリの画面で実行し、自動テスト `FormatToolsTests` でも確かめています):
+  - 8800: `AFORMAT B:` が 77 トラックを最後まで終え、`PIP` でのコピー、`DIR B:`、`STAT B:`(290k)まで動きます。
+  - 680b FLEX: 未フォーマットの `CAT 1` は読めない表示になり、`NEWDISK 1` で「FORMATTING COMPLETE / TOTAL SECTORS = 988」になります。その後の `CAT 1` は `DISK: MYDISK #1` と `SECTORS LEFT = 988` を表示し、`COPY` でコピーできます。
+  - 680b CP/68: 未フォーマットの `DIR 1` は `DSK ERROR: 05` になり、`INIT 1`(確認に `Y` と Return)のあとは `DIR 1` が `00000. SECTORS USED` を表示し、`PIP` でコピーできます。
+- CP/68 の `INIT` は、トラック 0 の最後のセクタを書きません。そのため `.fmt` が 1 セクタ分だけ残ります(使用には影響しません)。FLEX の `NEWDISK` は全セクタを書くので、`.fmt` は消えます。
+- 88-DCDD は、MITS のマニュアル(Altair Floppy Disk 88-DCDD)の記述に合わせて、ステップでヘッドが再びロードされること、書き込み許可の直後のヘッドアンロードが書き込み終了まで保留されることを実装しています。マニュアルにある時間の規定(ヘッドロード後 40ms、ENWD の 32µs 周期、書き込み電流 HCS の自動リセットなど)は、時間を持たないモデルなので実装していません。
+
+### ユーザー追加(一覧にないファイルを自分で足す)
+
+設定画面の「ユーザー追加…」から、一覧にない ROM、プログラム、ディスクイメージを名前をつけて追加できます。追加したファイルは `library/user/files/` にコピーされ、一覧の「ユーザー追加」欄に出ます。登録内容は `library/user/items.json` に保存されるので、次に起動しても残ります。
+
+| 種類 | 対象 | できること |
+|---|---|---|
+| Altair 8800 ディスク | 337,568 バイト以上の `.dsk` | 「起動」(88dskrom から)、ドライブ A〜D へ「装着」 |
+| Altair 680b ディスク | 256,256 バイト以上の `.dsk` | 「起動」(FLEX や CP/68 と同じ起動 PROM から)、ドライブへ「装着」 |
+| Altair 8800 プログラム/ROM | `.hex`(各レコードのアドレス)、`.bin`(配置アドレスを指定) | RAM への読み込み、または ROM としての取り付け、開始アドレスから実行。RAM は 4〜64KB から選択 |
+| Altair 680b プログラム/ROM | `.s19` | 680b のモニタを起動して RAM へ読み込み、開始アドレスがあれば J で実行。「ROM として起動」にすると、モニタなしで RESET ベクタから起動 |
+
+ファイルの拡張子とサイズから種類を自動で選びますが、追加するときに変えられます。ディスクは「作業コピーを破棄」で、追加したときの状態に戻せます。「編集…」で名前や開始アドレスを変えられます。「削除」は一覧の登録と、ライブラリ内のコピーを消します(元のファイルは消しません)。
+
+ディスクイメージは、起動のたびに `~/Library/Application Support/AltairSim/disks/` へ作業用コピーを作り、書き込みはそのコピーに入ります。ライブラリのファイルは変わりません。
+
+### CP/M ディスクをつくる(FORTRAN-80、COBOL-80 など)
+
+設定画面の「CP/M ディスクをつくる…」は、ファイルを Altair 8800 用の CP/M 2.2 ディスクイメージ 1 枚にまとめます。FORTRAN-80 や COBOL-80 は配布元が単体のファイルで配っているので、この機能で 1 枚にします。
+
+1. 設定画面の一覧で「CP/M 言語系の単体ファイル」を取り込む(取得元は一覧の「取得元」)
+2. 「CP/M ディスクをつくる…」を開き、「FORTRAN-80 一式」または「COBOL-80 一式」を押す(「ファイルを追加…」で、手持ちのファイルも足せる)
+3. 「つくる」を押すと、ユーザー追加に 1 枚のディスクとして登録される
+4. CP/M 2.2 を起動し(ドライブ A)、ユーザー追加の項目をドライブ B に装着して、`B:` に切り替えて使う(例: `F80 =HELLO`、`L80 HELLO,HELLO/N/E`)
+
+もとのディスクは、取り込み済みの CP/M 2.2b を既定にしています。「もとのディスクにあるファイルを残す」をオフにすると、ファイルを全部消した空の CP/M ディスクにファイルを入れます(容量は約 296KB。シートの右上に、入れるファイルの合計が出ます)。つくったディスクの形式は、実物の CP/M 2.2b の BIOS が読み書きできることを、テストで確かめています(トラック 6 以降はセクタの形式とセクタ番号の並びが違います)。
+
+テストは、ライブラリのファイルがなければ該当のものだけ自動でスキップします(`swift test`)。
+
+## ROM
+
+ROM ファイル(`8kBas_e0/e8/f0/f8.bin`、`88dskrom.bin`)の入手先は、上の「入手先」の表にあります。
+
+「BASIC 8K」ボタンで E000h に取り付けて実行します(RAM 32KB)。
+BASIC ROM はシリアルをポート 00h/01h(2SIO 形式)で使うため、シミュレータは 00h/01h と 10h/11h の両方を同じ端末に接続しています。
+`88dskrom.bin` はディスクブート(FF00h)用で、CP/M と Zork の起動に使います。
+
+## 速度オプション
+
+端末の上のメニューで切り替えます。
+
+- CPU: `実機の速度`(実時間に合わせて実行し、遅れた分は取り戻す。0.1 秒を超える遅れは切り捨て)/ `最速`
+- シリアル: `制限なし` / 9600 / 1200 / 300 / 110 ボー(テレタイプ、11 ビット/文字)。
+  送信可ビット(ステータスの bit1)が文字の所要時間だけ下がり、BASIC などステータスを見て出力するプログラムが遅くなる
+
+## ディスクと CP/M
+
+- 88-DCDD フロッピーディスクコントローラ(ポート 08h-0Ah、ドライブ A〜P)を実装しています。回転待ちは時間ではなく「セクタレジスタを読むたびに 1 セクタ進む」簡易モデルです
+- ディスクイメージは 77 トラック × 32 セクタ × 137 バイト(337,568 バイト)以上の .dsk です。配布されている .dsk は末尾に余白があります(CP/M 2.2 は 337,664 バイト)
+- 「CP/M 2.2 で起動」: ライブラリの `disks/cpm22b23-56k.dsk`(altairclone.com で入手)を `~/Library/Application Support/AltairSim/disks/` に作業用コピーとして置き、ドライブ A に装着し、88dskrom(FF00h)から起動します。RAM は 64KB。ディスクへの書き込みは作業用コピーに反映され、元のファイルは変わりません
+- 「ディスク」メニューから、ドライブ A〜D に任意の .dsk を装着・取り外しできます。この場合は選んだファイルに直接書き込まれます
+- 「CP/M 3 で起動」: ライブラリの `cpm3_v1.0_56K_disk1.dsk` をドライブ A、`cpm3_v1.0_56k_disk2.dsk` をドライブ B に装着して起動します。作業用コピーの扱いは CP/M 2.2 と同じです
+- 動作確認: CP/M 2.2b の起動、`DIR`、`PIP` によるファイルコピー(ディスク書き込み)、`MBASIC`(BASIC-80)の `PRINT 2+3`
+
+## ディスクドライブ画面
+
+パネルの下に 88-DCDD のドライブ A・B を描いています(Altair 8800 の下に積まれる青い筐体の写真をもとにした配色)。ドアをクリックするとディスクの装着(ファイル選択)と取り出しを切り替えます。装着中はスロットにスリーブとファイル名、アクセス中は IN USE ランプ、ヘッド位置は TRK で表示します。
+
+CP/M 3 の動作確認: `CP/M V3.0 Loader` から `CP/M 3 BIOS v1.0 for Altair 8" Floppy` まで起動、`DIR`、`PIP` による B ドライブへの書き込み、`MBASIC`(BASIC-80 Rev. 5.21)の `PRINT 2+3`。
+
+## Zork
+
+「Zork」ボタンで Burcon 56K CP/M 2.2 のディスク(`zork.dsk`)をドライブ A から起動します。`A>` で `ZORK1` または `ZORK2` と入力します。このディスクには `ZORK3.COM` はありますがデータファイルがなく、`Load Game Disk` の表示で止まります。
+
+## 8080 命令テスト
+
+ライブラリの `cpu_tests/` に取り込んだ CP/M 用テストプログラムを、BDOS 呼び出し(0005h)だけを模擬するハーネスで実行します(`CPUExerciserTests`)。
+
+| テスト | 結果 |
+|---|---|
+| `TST8080.COM` | `CPU IS OPERATIONAL` |
+| `8080PRE.COM` | `8080 Preliminary tests complete` |
+| `CPUTEST.COM`(SuperSoft Diagnostic II) | `CPU TESTS OK`(255,651,553 クロック = 2MHz で約 128 秒。配布元の説明は「2MHz で約 2 分」) |
+| `8080EXM.COM`(全命令・フラグを CRC で照合) | 25 項目すべて `PASS`(23,803,378,391 クロック = 2MHz で約 3.3 時間分、リリースビルドで約 318 秒) |
+
+8080EXM は時間がかかるので、環境変数を付けたときだけ実行します。
+
+```bash
+RUN_8080EXM=1 swift test -c release -Xswiftc -enable-testing --filter CPUExerciserTests/test8080EXM
+```
+
+## HLT の動作
+
+Intel 8080 データシート(2-13〜2-14 ページ、Table 2-1)に合わせています。
+
+- HLT を実行すると停止状態(HLTA)に入り、RUN スイッチは RUN のまま、HLTA が点灯、WAIT は消灯します。アドレス LED は HLT の次の番地、ステータスは HLTA + MEMR + WO(M1 は消灯)です
+- 抜けられるのは RESET(PC = 0)と、INTE が 1 のときの割り込みだけです。STOP → RUN や SINGLE STEP では解除されません
+- DI の後の HLT は RESET でしか抜けられません
+- 割り込みを起こすスイッチは実機のパネルにないので、内部関数(`AltairMachine.requestInterrupt`)としてテストから使えるようにしています。HOLD は未実装です
+- データ LED は、HLT 命令の値(76h)のままです。実機では M2 サイクルの途中でデータバスがフローティングになるため、パネルでの見え方は確認していません
+
+## 削除キー
+
+端末の削除キーは、起動するプログラムに合わせて送るコードを切り替えます(端末の設定「削除キー」で変更もできます)。
+
+| 設定 | コード | 使い所 |
+|---|---|---|
+| BS(^H) | 08h | CP/M(既定)。「BS-SP-BS」で画面上の文字を消す |
+| DEL(7F) | 7Fh | CP/M は削除した文字をそのままエコーする(ハードコピー端末向け)。Altair BASIC は `\9\` のように表示する |
+| _(Altair BASIC) | 5Fh | Altair BASIC(「BASIC 8K」を起動すると自動で選ぶ)。BASIC は削除した上で `_` を表示する |
+
+Mac の delete キーは SwiftUI の `.delete` と一致せず、U+007F の文字として届くため、文字で判定しています。fn + delete(前方削除)は ADM-3A の RUB OUT にあたる 7Fh を送ります。
+
+## 16 進入力
+
+ツールバーの下に 2 つの入力欄があります。
+
+- スイッチ: アドレススイッチ(A15〜A0)を 16 進で設定します(例: `FF00`)。スイッチを手で動かすと、欄の値も追従します
+- 書き込み: `番地: バイト列` の形(例: `0000: 3E 01 76`)で RAM に書き込みます。パネルの EXAMINE → DEPOSIT → DEPOSIT NEXT … と同じ手順で、書き込み後は先頭番地を EXAMINE した状態になります。実行中は STOP してから書き込みます。RAM でない番地(ROM や未実装領域)は書き込まれません
+
+## 端末(80 桁 × 24 行)
+
+端末は 80 × 24 の画面バッファを持ち、次の制御を解釈します。
+
+- 制御文字: CR、LF(最下行でスクロール)、BS(カーソルを戻すだけ。文字は消えない。CP/M の BS-SP-BS で消える)、TAB。DEL(7Fh)などは無視します
+- ANSI(VT100 系): `ESC [ H` `f`(位置指定)、`A B C D`(移動)、`J`(画面消去)、`K`(行消去)、`L M`(行挿入・削除)。`m`(文字属性)は無視します
+- ADM-3A: `ESC = 行 桁`(位置指定)、1Eh(ホーム)、1Ah(画面消去)
+
+WM(WORDMASTER、CP/M 2.2 ディスクに入っている画面エディタ)が ANSI のシーケンスで画面を制御するため、この解釈が必要でした。
+
+## Altair 680b(Motorola 6800)
+
+ウィンドウ左上の「機種」で Altair 8800 と Altair 680b を切り替えます。端末(ADM-3A 風)は共用です。
+
+- CPU: MC6800(`CPU6800`)。全命令、IRQ・NMI・SWI・WAI、クロック数つき。未定義のオペコードは 2 クロックの NOP として数えます(`illegalCount`)
+- クロック: 500kHz
+- メモリ: RAM 8KB、ACIA(6850)が F000(制御・状態)と F001(データ)、ストラップが F002、PROM モニタが FF00〜FFFF(680b の MON680.S19)
+- パネル: AC / HLT / RUN の LED、アドレス LED(A15〜A0)、データ LED(D7〜D0)、各スイッチ、RESET、HLT-RUN、DEP。EXAMINE はなく、HALT 中はアドレススイッチの番地の中身がデータ LED に出ます
+- 「モニタ起動」: 「.」のプロンプトが出ます。`M 0010` で表示と書き込み、`N` で次の番地、`J 0020` で実行、`L` で S レコードの読み込み
+- 「BASIC を読み込んで起動」: 紙テープ版 BASIC を、モニタの `L` コマンドで読み込み、`J 0000` で起動します。`MEMORY SIZE?` は Return、`TERMINAL WIDTH?` は Return、`WANT SIN-COS-TAN-ATN?` は N
+- 「端末なし(フロントパネル運用)」: ストラップを「端末なし」にして、リセット後に 0000 番地から実行します。スイッチで書いたプログラムを走らせる構成です
+
+動作確認: モニタ、BASIC の読み込みと起動、`PRINT 6*7`(42)、FOR ループ、`PRINT 100/7`(14.2857)。
+
+クロック: 500kHz(1 クロック 2 マイクロ秒)。680b の Theory of Operation で確認(2MHz の水晶を 4 分周)。未確認: 680 と 680b の差、パネルの色・配置の細部、定番の CPU テスト(見つかっていない)。
+
+## 6800 の機能テストプログラム
+
+`Tools/gen6800_functional_test.py` が、MC6800 の全オペコード(WAI を除く 196 個)・全アドレッシングモードを実行して結果を照合する、6800 の機械語のプログラムを作ります。
+
+- 1 ケース = 1 命令と、その入力(A、B、X、CC、メモリ、スタックの内容)。2,660 ケース(命令ごとに 12 通り。DAA は上位・下位ニブルの種類と H・C の全組み合わせで 320 通り)
+- プログラムは、各ケースを実行する前に RTI でレジスタと CC を一度に設定し(フラグを壊さない)、実行後の A、B、X、SP、CC、メモリ 4 バイト、スタック 16 バイトを集めて、16 ビットのチェックサムを、期待値と比べます。不一致のケースは、位置と実際の状態を先頭 32 件まで記録します
+- 期待値は、同じファイルの参照モデル(Python)が計算します。命令の意味を「整数演算の定義」(符号つきの範囲を超えたら V、符号なしで借りたら C)で書いてあり、CPU 実装(ビット演算)とは別の書き方です
+- 生成物: `Tests/Resources/6800/functional6800.s19`(プログラムとデータ)、`functional6800.txt`(各ケースの内容と期待状態)、`functional6800.json`
+- 実行: `CPU6800FunctionalTests`(約 1,150 万クロック)。生成し直すには `python3 Tools/gen6800_functional_test.py`
+
+確認したこと: CPU は全ケースで一致。CPU に 10 通りのバグ(ROL の V、DAA、ADD の H、SBC の C、JSR のスタック順、CPX の V、INX の Z、BGT、TAP の I、NEG の C)を入れて、すべて検出されること。
+
+限界: 参照モデルと CPU の実装は同じ人(私)が書いたので、同じ思い違いは見つけられません。実機や別のエミュレータとの照合はしていません(プログラム自体は 6800 の機械語なので、別の環境でも動かせます)。DAA の不正な BCD 入力、V の「未定義」の扱い(DAA は V をマスク)、WAI と割り込みは対象外です。
+
+## Altair 680b のディスク(68-UIO と FD3712)
+
+- 680b にも 8800 と同じ形で、ディスクコントローラとドライブ A〜D(2 台入り × 2 段)の画面があります。ディスクの装着・取り外しのしくみ(`DiskSubsystem`)と、ドライブの絵は共通です
+- 68-UIO ボード: F006/F007 に 2 つ目の ACIA(端末はつながっていない)、F008〜F00F に MC6821 の PIA が 2 つ(`PIA6821`)。PIA のレジスタは、アドレスの最下位ビットが反転した配線(F008 = 制御 A、F009 = データ A、F00A = 制御 B、F00B = データ B)
+- Pertec FD3712(`FD3712Controller`): PIA #1 のポート A がステータス/データの入力(論理が反転)、ポート B がコマンド出力、PIA #2 のポート B がデータ出力。実行のストローブは、データ出力側の CB2 とデータ入力側の CA2 のハンドシェイク(PIA の自動ハンドシェイク)の OR。コマンドは、リセット(81)、ドライブ/セクタ設定(21)、トラック設定(11)、シーク(09)、トラック 0 へ復帰(0D)、読み出し(03)、書き込み(05)、CRC 検証(07)、書き込みバッファ(31)、読み出しバッファ(41)、エラー消去(0B)
+- ディスクは IBM 3740 形式(77 トラック × 26 セクタ × 128 バイト = 256,256 バイト)。回転位置は持たず、コマンドごとの所要時間(ビジー)で近似しています
+- 動作確認: FLEX の起動 PROM(BOOT.ASM)とディスクドライバ(DSKDRV.ASM)が使うレジスタ操作の手順を、そのまま Swift で書き写したテスト(`FD3712Tests`)で、読み出し、シーク、書き込み、ドライブ 2 台、未接続、書き込み禁止、ビジーの時間を確認
+アプリを起動した直後は、8800 も 680b も電源オフです(全ランプ消灯)。電源は機種ごとに独立していて、機種タブを切り替えても、もう一方の電源や端末の画面はそのまま残ります。8800 は、パネルの POWER スイッチを入れるか、「CP/M 2.2」などの起動ボタンを押して始めます。POWER スイッチで始めたときは、RUN スイッチを実機と同じく自分で操作します。起動ボタン(「BASIC 8K」「CP/M 2.2」「CP/M 3」「Zork」)は、電源を入れて、起動番地から実行するところまで行います。680b は、電源を入れると PROM モニタが起動して「.」プロンプトが出ます。
+- 動作確認(本物の起動 PROM と、配布のディスクイメージで): 「FLEX 3.0」は `6800 FLEX V3.0` が起動して `DATE (MM,DD,YY)?` を聞き、`CAT` でファイル一覧(SAVE、PCGET、…、BASIC、CC、WC など、残り 493 セクタ)が出ます。「CP/68」は `HEMENWAY ASSOCIATES CP/68-1.0` が起動して、`DIR` で INIT、LINK、PIP、CP68.SYS などが出ます。FLEX では、ディスクに入っている `BASIC.CMD`(59 セクタ)も動きます(`BASIC` と打つと `READY`、`PRINT 2+3` が 5、FOR ループが `1  4  9  16  25`)。FLEX BASIC では `SAVE "SQUARES"` でディスクに保存し、`NEW` のあと `LOAD "SQUARES"` で読み戻せます(`SQUARES.BAS` が FLEX のディレクトリに載ります)。ディスクへの書き込みは、ディスク操作が止まって約 1.5 秒後に作業コピー(`~/Library/Application Support/AltairSim/disks/`)へ自動で書き戻されるので、アプリを閉じても残ります。CP/68 では `PIP COPY1.SYS=CP68.SYS` でディスクへの書き込みを確かめ、書いたファイルを `COPY2.SYS=COPY1.SYS` で読み戻せます(PIP は一度起動すると `PIP-` のプロンプトに入ったままになります。抜け方は資料がなく未確認です)。SAVE したファイルは、別の機械で起動し直しても `CAT` に残り `LOAD` できることをテストで確認しています。FD3712 の待ち時間(読み書き約 6.4ms、シークは1トラック 1ms)はデータシートからの近似で、実機での実測値とは照合できていません。680b の電源スイッチは実機では背面パネルにある(取扱説明書 p.14)ので、前面パネルには付けず、画面左側のボタン列の「電源(背面)」で切り替えます。OFF で全ランプが消えて CPU が止まり、ON にすると AC ランプが点いて、PROM モニタが起動します。どちらも起動 PROM(`altair680/boot/BOOT.S19`)、SWIMON、68-UIO、RAM 48KB、ドライブ A のディスクで、モニタの `J FC00` から起動します
+- 配布の FLEX 3.0 のイメージは、ブートローダ(トラック 0 の物理セクタ 1 の 5・6 バイト目)にシステムファイル(FLEX3.SYS)の位置が書かれていません(LINK.CMD を実行する前の状態)。このままでは、ローダがトラック 0 セクタ 0 を読もうとして起動をやり直し続けます。「FLEX 3.0」ボタンは、作業用コピーに LINK と同じ処理(`FLEXImage.linkBootLoader`。ディレクトリから FLEX3.SYS のトラック 17・セクタ 12 を探して書く)を行ってから起動します。元のイメージは変えません
+- ドライブのラベル、作業用コピーの扱い(`~/Library/Application Support/AltairSim/disks/`)は、8800 のディスクと同じです
+
+## ライセンス
+
+このリポジトリのソースコードとドキュメントは [MIT License](LICENSE) です。ROM、ディスクイメージ、8080 テストプログラムなど、取り込んで使うファイルは対象外で、それぞれの配布元の条件に従います。
