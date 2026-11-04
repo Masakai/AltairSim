@@ -61,7 +61,24 @@ ROM、ディスクイメージ、8080 テストプログラムは、配布元の
 3. 「ファイル・フォルダを取り込み…」で複数のファイルやフォルダをまとめて選ぶか、一覧へドラッグします。ファイル名で項目を判別します。名前が違うファイルは、項目の「取り込み…」で指定して取り込めます
 4. 取り込み済みの項目は緑のチェックになります
 
-取り込んだファイルは `~/Library/Application Support/AltairSim/library/` にコピーされます(環境変数 `ALTAIR_LIBRARY` で場所を変えられます。テスト用です)。ファイルがない機能のボタンを押すと、足りないファイル名を状態欄に出して設定画面を開きます。サイズが想定と違うファイルも取り込みますが、警告を出します。詳しい一覧と取得元は [docs/library.md](docs/library.md) にあります。
+取り込んだファイルは `~/Library/Application Support/AltairSim/library/` にコピーされます(環境変数 `ALTAIR_LIBRARY` で場所を変えられます。テスト用です)。ファイルがない機能のボタンを押すと、足りないファイル名を状態欄に出して設定画面を開きます。サイズが想定と違うファイルも取り込みますが、警告を出します。ライブラリ内の置き場所の一覧は [docs/library.md](docs/library.md) にあります。
+
+### 入手先
+
+ファイルごとの正確な取得元 URL は、設定画面の一覧(「取得元」リンク)と `Sources/AltairCore/AssetLibrary.swift` の `catalog` にあります。URL は 2026-10 時点のものです。
+
+| 機種・用途 | ファイル | 探す場所 |
+|---|---|---|
+| Altair 8800 | Altair BASIC 8K ROM(`8kBas_e0/e8/f0/f8.bin`) | [altairclone.com/downloads/roms/8K BASIC/](https://altairclone.com/downloads/roms/8K%20BASIC/) |
+| Altair 8800 | ディスクブートローダ(`88dskrom.bin`) | [github.com/tommojphillips/Altair8800](https://github.com/tommojphillips/Altair8800/tree/master/roms) の `roms/` |
+| Altair 8800 | CP/M 2.2b、CP/M 3、Zork、BASIC コンパイラ、BDS C、FORTRAN-80、COBOL-80 | [altairclone.com/downloads/cpm/](https://altairclone.com/downloads/cpm/) の下の各フォルダ |
+| Altair 8800 | Altair DOS 用 FORTRAN 2.8 | [altairclone.com/downloads/altair_dos/](https://altairclone.com/downloads/altair_dos/) |
+| 8080 命令テスト | `TST8080.COM` `8080PRE.COM` `CPUTEST.COM` `8080EXM.COM` | [github.com/superzazu/8080](https://github.com/superzazu/8080/tree/master/cpu_tests) の `cpu_tests/` |
+| Altair 680b | PROM モニタ(`MON680.S19`、`SWIMON.S19`)、BASIC、起動 PROM(`BOOT.S19`)、FLEX 3.0、CP/68 | [deramp.com/downloads/altair/software/altair_680/](https://deramp.com/downloads/altair/software/altair_680/) の下の各フォルダ |
+| IMSAI 8080 | CP/M 1.31(`imsai-cpm13.dsk`)、IMDOS の `FORMAT.COM` | [deramp.com の IMSAI ソフトウェア](https://deramp.com/downloads/mfe_archive/010-S100%20Computers%20and%20Boards/00-Imsai/40-Imsai%20Software/) の `IMSAI CPM/` と `IMDOS/` |
+| IMSAI 8080 | CP/M 1.33、CP/M 2.2、Fig-Forth、IMDOS 2.02 / 2.05(`.tgz`) | z80pack のミラー [icl1900.co.uk/unix4fun/z80pack/ftp/imsai/](https://www.icl1900.co.uk/unix4fun/z80pack/ftp/imsai/readme.txt) |
+
+altairclone.com で配られているファイルの一覧は [docs/altairclone-downloads.md](docs/altairclone-downloads.md) にまとめています。
 
 ### 未フォーマットの空ディスク
 
@@ -112,10 +129,7 @@ ROM、ディスクイメージ、8080 テストプログラムは、配布元の
 
 ## ROM
 
-| ファイル | 取得元 |
-|---|---|
-| `8kBas_e0/e8/f0/f8.bin`(Altair BASIC 8K、E000h〜) | altairclone.com/downloads/roms/8K BASIC/ |
-| `88dskrom.bin` | github.com/tommojphillips/Altair8800/tree/master/roms |
+ROM ファイル(`8kBas_e0/e8/f0/f8.bin`、`88dskrom.bin`)の入手先は、上の「入手先」の表にあります。
 
 「BASIC 8K」ボタンで E000h に取り付けて実行します(RAM 32KB)。
 BASIC ROM はシリアルをポート 00h/01h(2SIO 形式)で使うため、シミュレータは 00h/01h と 10h/11h の両方を同じ端末に接続しています。
@@ -245,3 +259,7 @@ WM(WORDMASTER、CP/M 2.2 ディスクに入っている画面エディタ)が AN
 - 動作確認(本物の起動 PROM と、配布のディスクイメージで): 「FLEX 3.0」は `6800 FLEX V3.0` が起動して `DATE (MM,DD,YY)?` を聞き、`CAT` でファイル一覧(SAVE、PCGET、…、BASIC、CC、WC など、残り 493 セクタ)が出ます。「CP/68」は `HEMENWAY ASSOCIATES CP/68-1.0` が起動して、`DIR` で INIT、LINK、PIP、CP68.SYS などが出ます。FLEX では、ディスクに入っている `BASIC.CMD`(59 セクタ)も動きます(`BASIC` と打つと `READY`、`PRINT 2+3` が 5、FOR ループが `1  4  9  16  25`)。FLEX BASIC では `SAVE "SQUARES"` でディスクに保存し、`NEW` のあと `LOAD "SQUARES"` で読み戻せます(`SQUARES.BAS` が FLEX のディレクトリに載ります)。ディスクへの書き込みは、ディスク操作が止まって約 1.5 秒後に作業コピー(`~/Library/Application Support/AltairSim/disks/`)へ自動で書き戻されるので、アプリを閉じても残ります。CP/68 では `PIP COPY1.SYS=CP68.SYS` でディスクへの書き込みを確かめ、書いたファイルを `COPY2.SYS=COPY1.SYS` で読み戻せます(PIP は一度起動すると `PIP-` のプロンプトに入ったままになります。抜け方は資料がなく未確認です)。SAVE したファイルは、別の機械で起動し直しても `CAT` に残り `LOAD` できることをテストで確認しています。FD3712 の待ち時間(読み書き約 6.4ms、シークは1トラック 1ms)はデータシートからの近似で、実機での実測値とは照合できていません。680b の電源スイッチは実機では背面パネルにある(取扱説明書 p.14)ので、前面パネルには付けず、画面左側のボタン列の「電源(背面)」で切り替えます。OFF で全ランプが消えて CPU が止まり、ON にすると AC ランプが点いて、PROM モニタが起動します。どちらも起動 PROM(`altair680/boot/BOOT.S19`)、SWIMON、68-UIO、RAM 48KB、ドライブ A のディスクで、モニタの `J FC00` から起動します
 - 配布の FLEX 3.0 のイメージは、ブートローダ(トラック 0 の物理セクタ 1 の 5・6 バイト目)にシステムファイル(FLEX3.SYS)の位置が書かれていません(LINK.CMD を実行する前の状態)。このままでは、ローダがトラック 0 セクタ 0 を読もうとして起動をやり直し続けます。「FLEX 3.0」ボタンは、作業用コピーに LINK と同じ処理(`FLEXImage.linkBootLoader`。ディレクトリから FLEX3.SYS のトラック 17・セクタ 12 を探して書く)を行ってから起動します。元のイメージは変えません
 - ドライブのラベル、作業用コピーの扱い(`~/Library/Application Support/AltairSim/disks/`)は、8800 のディスクと同じです
+
+## ライセンス
+
+このリポジトリのソースコードとドキュメントは [MIT License](LICENSE) です。ROM、ディスクイメージ、8080 テストプログラムなど、取り込んで使うファイルは対象外で、それぞれの配布元の条件に従います。

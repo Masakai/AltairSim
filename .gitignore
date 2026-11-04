@@ -23,3 +23,10 @@ cassette-basic-*.s19
 
 # アプリのビルド成果物(Tools/make_app.sh)
 build/
+
+# 配布アーカイブと CP/M の単体ファイル(z80pack の .tgz、FORTRAN-80・COBOL-80 の .REL/.OVR)
+*.tgz
+*.REL
+*.rel
+*.OVR
+*.ovr
