@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en" data-lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AltairSim — Altair 8800, Altair 680b and IMSAI 8080 on your Mac</title>
+<meta name="description" content="A macOS app written in Swift that runs the Altair 8800, the Altair 680b and the IMSAI 8080 with their front panels, a terminal and floppy drives. CP/M, FLEX and BASIC boot on it.">
+<meta property="og:title" content="AltairSim — Altair 8800, Altair 680b and IMSAI 8080 on your Mac">
+<meta property="og:description" content="Front panels you can switch by hand, a terminal and floppy drives. CP/M, FLEX and BASIC boot on it.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://masakai.github.io/AltairSim/">
+<meta property="og:image" content="https://masakai.github.io/AltairSim/media/altairsim-en.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#07090d">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231d5c9e'/%3E%3Crect x='4' y='8' width='24' height='16' rx='2' fill='%2307090d'/%3E%3Ccircle cx='10' cy='16' r='2.6' fill='%23ff3322'/%3E%3Ccircle cx='16' cy='16' r='2.6' fill='%23ff3322' opacity='.5'/%3E%3Ccircle cx='22' cy='16' r='2.6' fill='%23ff3322'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#07090d; --panel:#10141c; --line:rgba(255,255,255,.09);
+  --text:#e9ecf2; --mute:#9ca4b5; --dim:#6c7488;
+  --led:#ff3322; --blue:#3d86d6; --amber:#e6b450; --green:#7dffa0;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Segoe UI","Noto Sans JP",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit}
+code{font:.92em var(--mono);color:#d6dcea}
+html[data-lang="en"] [lang="ja"]{display:none!important}
+html[data-lang="ja"] [lang="en"]{display:none!important}
+.wrap{width:min(1120px,100% - 40px);margin-inline:auto}
+
+.bg{position:fixed;inset:0;z-index:-1;background:
+  radial-gradient(900px 520px at 80% -8%,rgba(61,134,214,.22),transparent 62%),
+  radial-gradient(700px 480px at 6% 26%,rgba(255,51,34,.08),transparent 60%),var(--bg)}
+.bg::after{content:"";position:absolute;inset:0;opacity:.5;
+  background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:44px 44px;mask-image:radial-gradient(ellipse 80% 60% at 50% 20%,#000 30%,transparent 80%)}
+
+nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(14px) saturate(1.3);background:rgba(7,9,13,.74);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;gap:22px;height:58px}
+.logo{font:800 18px var(--mono);letter-spacing:.12em;text-decoration:none;display:flex;align-items:center;gap:10px}
+.logo i{display:inline-flex;gap:4px}
+.logo i b{width:7px;height:7px;border-radius:50%;background:var(--led);box-shadow:0 0 8px var(--led);animation:blink 1.6s infinite}
+.logo i b:nth-child(2){animation-delay:.25s}.logo i b:nth-child(3){animation-delay:.5s}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+nav ul{display:flex;gap:22px;list-style:none;margin:0 0 0 auto;padding:0;font-size:14px;color:var(--mute)}
+nav ul a{text-decoration:none}nav ul a:hover{color:var(--text)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--text);font:600 14px var(--sans);text-decoration:none;cursor:pointer;transition:.18s}
+.btn:hover{border-color:rgba(255,255,255,.28);background:rgba(255,255,255,.08)}
+.btn.primary{background:linear-gradient(180deg,#4a93e0,#1d5c9e);border-color:#5a9fe6;box-shadow:0 6px 28px -6px rgba(61,134,214,.7)}
+.btn.primary:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.lang{font:600 12px var(--mono);padding:6px 10px;white-space:nowrap}
+:focus-visible{outline:2px solid var(--amber);outline-offset:3px;border-radius:6px}
+
+.hero{padding:76px 0 34px;text-align:center}
+.eyebrow{font:600 12px var(--mono);letter-spacing:.3em;color:var(--amber);text-transform:uppercase}
+h1{font:900 clamp(52px,10vw,120px)/.95 var(--mono);letter-spacing:.04em;margin:18px 0 6px;
+  background:linear-gradient(180deg,#fff 20%,#a9cdf5 100%);-webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 0 28px rgba(61,134,214,.45))}
+.tag{font:600 clamp(20px,3.2vw,30px)/1.35 var(--sans);margin:10px 0 0}
+.tag em{font-style:normal;color:var(--led);text-shadow:0 0 18px rgba(255,51,34,.7)}
+.lead{max-width:700px;margin:18px auto 0;color:var(--mute);font-size:17px}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:30px}
+.badges{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:22px;font:12px var(--mono);color:var(--dim)}
+.badges span{padding:3px 10px;border:1px solid var(--line);border-radius:99px}
+
+section{padding:84px 0}
+.kicker{font:600 12px var(--mono);letter-spacing:.28em;color:var(--amber);text-transform:uppercase}
+h2{font:800 clamp(28px,4.6vw,44px)/1.15 var(--sans);margin:12px 0 14px;letter-spacing:-.01em}
+.sub{color:var(--mute);max-width:680px;margin:0}
+
+.video-wrap{max-width:960px;margin:0 auto}
+.video-wrap video{width:100%;height:auto;display:block;border-radius:16px;border:1px solid var(--line);background:#000;
+  box-shadow:0 30px 80px -30px rgba(0,0,0,.9),0 0 70px -24px rgba(61,134,214,.5)}
+.video-wrap p{font:12px/1.7 var(--mono);color:var(--dim);margin:12px 4px 0}
+
+.machine{display:grid;grid-template-columns:1.25fr 1fr;gap:34px;align-items:center;margin-top:56px}
+.machine:nth-of-type(even) .shot{order:2}
+.shot{margin:0}
+.shot img{width:100%;height:auto;display:block;border-radius:12px;border:1px solid var(--line);box-shadow:0 30px 80px -30px rgba(0,0,0,.9),0 0 60px -26px rgba(61,134,214,.5)}
+.shot figcaption{font:12px var(--mono);color:var(--dim);margin-top:10px}
+.machine h3{font:800 24px var(--mono);letter-spacing:.06em;margin:0 0 4px}
+.machine .cpu{font:600 13px var(--mono);color:var(--amber);margin:0 0 12px}
+.machine ul{margin:0;padding-left:1.1em;color:var(--mute);font-size:15px}
+.machine li{margin:4px 0}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;margin-top:40px}
+.card{padding:26px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.015));transition:.25s}
+.card:hover{border-color:rgba(61,134,214,.55);transform:translateY(-3px);box-shadow:0 18px 50px -22px rgba(61,134,214,.6)}
+.card .ico{font:800 13px var(--mono);color:var(--led);letter-spacing:.1em;margin-bottom:12px;text-shadow:0 0 12px rgba(255,51,34,.6)}
+.card h3{margin:0 0 8px;font:700 19px var(--sans)}
+.card p{margin:0;color:var(--mute);font-size:15px}
+
+.two{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:38px;align-items:start}
+.box{border:1px solid var(--line);border-radius:16px;padding:26px;background:rgba(255,255,255,.025)}
+.box h3{margin:0 0 6px;font:700 17px var(--sans)}
+.box p{color:var(--mute);margin:0 0 12px;font-size:15px}
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font:13px/1.6 var(--mono)}
+td,th{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--dim);font-weight:600;font-size:11px;letter-spacing:.12em}
+td:first-child{color:var(--amber);white-space:nowrap}
+td a{color:#9cc6f2}
+pre{margin:0;padding:18px 20px;background:#05060a;border:1px solid var(--line);border-radius:14px;font:13px/1.75 var(--mono);color:#cfd5e3;overflow-x:auto;position:relative}
+pre .c{color:var(--dim)}
+.copy{position:absolute;top:10px;right:10px;padding:5px 10px;font:11px var(--mono)}
+.steps{counter-reset:s;display:grid;gap:12px;margin:26px 0 0;padding:0;list-style:none}
+.steps li{counter-increment:s;display:flex;gap:14px;color:var(--mute)}
+.steps li::before{content:counter(s);flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:700 12px var(--mono);color:#fff;background:var(--blue);box-shadow:0 0 14px rgba(61,134,214,.6)}
+.note{border:1px solid rgba(230,180,80,.35);background:linear-gradient(180deg,rgba(230,180,80,.07),rgba(230,180,80,.02));border-radius:18px;padding:30px}
+.note td:first-child{color:var(--text)}
+footer{padding:46px 0 70px;border-top:1px solid var(--line);color:var(--dim);font-size:14px}
+footer .wrap{display:flex;gap:18px;flex-wrap:wrap;justify-content:space-between}
+footer a{color:var(--mute)}
+
+.reveal{opacity:0;transform:translateY(18px);transition:opacity .7s,transform .7s}
+.reveal.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}.logo i b{animation:none}}
+@media (max-width:520px){
+  .wrap{width:min(1120px,100% - 32px)}
+  nav .wrap{gap:10px}
+  .logo{font-size:15px;letter-spacing:.08em}
+  nav .btn:not(.lang){display:none}
+}
+@media (max-width:860px){
+  nav ul{display:none}nav .lang{margin-left:auto}
+  .machine,.two{grid-template-columns:1fr}
+  .machine:nth-of-type(even) .shot{order:0}
+  .hero{padding-top:48px}section{padding:60px 0}
+}
+</style>
+</head>
+<body>
+<div class="bg" aria-hidden="true"></div>
+
+<nav>
+  <div class="wrap">
+    <a class="logo" href="#top" aria-label="AltairSim"><i aria-hidden="true"><b></b><b></b><b></b></i>ALTAIRSIM</a>
+    <ul>
+      <li><a href="#video"><span lang="en">Video</span><span lang="ja">動画</span></a></li>
+      <li><a href="#machines"><span lang="en">Machines</span><span lang="ja">機種</span></a></li>
+      <li><a href="#features"><span lang="en">Features</span><span lang="ja">特長</span></a></li>
+      <li><a href="#start"><span lang="en">Get started</span><span lang="ja">使い方</span></a></li>
+      <li><a href="#roms"><span lang="en">ROMs &amp; disks</span><span lang="ja">ROM とディスク</span></a></li>
+      <li><a href="#notes"><span lang="en">Notes</span><span lang="ja">注意点</span></a></li>
+    </ul>
+    <button class="btn lang" id="langBtn" type="button" aria-label="Switch language">EN / 日本語</button>
+    <a class="btn" href="https://github.com/Masakai/AltairSim">GitHub ↗</a>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap">
+    <div class="eyebrow"><span lang="en">Altair 8800 · Altair 680b · IMSAI 8080</span><span lang="ja">Altair 8800 · Altair 680b · IMSAI 8080</span></div>
+    <h1>AltairSim</h1>
+    <p class="tag"><span lang="en">Flip a 1975 power switch <em>on your Mac</em>.</span><span lang="ja">1975 年の電源スイッチを、<em>Mac で入れる</em>。</span></p>
+    <p class="lead">
+      <span lang="en">A macOS app written in Swift that runs three microcomputers of the 1970s with their front panels, a terminal and floppy drives. You flip the switches yourself. CP/M 2.2 and 3, FLEX 3.0, CP/68, Altair BASIC and IMSAI CP/M boot on it.</span>
+      <span lang="ja">1970 年代のマイコン 3 機種を、フロントパネル、端末、フロッピードライブつきで動かす、Swift で書いた macOS アプリです。パネルのスイッチは自分で操作します。CP/M 2.2 と 3、FLEX 3.0、CP/68、Altair BASIC、IMSAI の CP/M が起動します。</span>
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="#start"><span lang="en">Get started</span><span lang="ja">使ってみる</span></a>
+      <a class="btn" href="#video"><span lang="en">Watch the video</span><span lang="ja">動画を見る</span></a>
+      <a class="btn" href="https://github.com/Masakai/AltairSim"><span lang="en">View on GitHub</span><span lang="ja">GitHub で見る</span> ↗</a>
+    </div>
+    <div class="badges"><span>macOS 14+</span><span>Swift</span><span>SwiftUI</span><span>MIT License</span><span>8080 / 6800</span></div>
+  </div>
+</header>
+
+<main>
+<section id="video" style="padding-top:40px">
+  <div class="wrap">
+    <div class="video-wrap reveal">
+      <video lang="en" controls playsinline preload="metadata" poster="media/altairsim-en.jpg" aria-label="AltairSim intro video (English narration)">
+        <source src="media/altairsim-en.mp4" type="video/mp4">
+      </video>
+      <video lang="ja" controls playsinline preload="metadata" poster="media/altairsim.jpg" aria-label="AltairSim 紹介動画(日本語ナレーション)">
+        <source src="media/altairsim.mp4" type="video/mp4">
+      </video>
+      <p>
+        <span lang="en">Intro video, about 23 seconds, with sound and English narration. The screens are recordings of the real app, whose menus are in Japanese; slow parts, such as loading BASIC, are fast-forwarded (marked ×3, ×8). The narration is AI-generated (Gemini TTS).</span>
+        <span lang="ja">紹介動画(約 23 秒、音声と日本語のナレーションあり)。画面は実際のアプリの録画で、BASIC の読み込みなど待ち時間の長いところは早送りしています(×3、×8 の表示)。ナレーションは AI 音声(Gemini TTS)です。</span>
+      </p>
+    </div>
+  </div>
+</section>
+
+<section id="machines">
+  <div class="wrap">
+    <div class="kicker reveal"><span lang="en">Machines</span><span lang="ja">機種</span></div>
+    <h2 class="reveal"><span lang="en">Three front panels in one app.</span><span lang="ja">3 台のフロントパネルを、1 つのアプリで。</span></h2>
+    <p class="sub reveal"><span lang="en">Switch machines from the top-left of the window. Each machine has its own power, so the other one keeps running and keeps its terminal.</span><span lang="ja">ウィンドウ左上で機種を切り替えます。電源は機種ごとに独立していて、切り替えても、もう一方の電源や端末の画面はそのまま残ります。</span></p>
+
+    <div class="machine reveal">
+      <figure class="shot"><img src="assets/altair8800.jpg" alt="The Altair 8800 front panel in AltairSim, with address and data LEDs and toggle switches" loading="lazy" width="1500" height="720"></figure>
+      <div>
+        <h3>ALTAIR 8800</h3>
+        <p class="cpu">Intel 8080 · 2 MHz</p>
+        <ul>
+          <li lang="en">Every 8080 instruction, with clock counts. EXAMINE, DEPOSIT, RUN, SINGLE STEP and RESET on the panel.</li>
+          <li lang="ja">8080 の全命令をクロック数つきで実装。パネルで EXAMINE、DEPOSIT、RUN、SINGLE STEP、RESET。</li>
+          <li lang="en">88-DCDD floppy controller and drives A–D. CP/M 2.2b, CP/M 3, and Zork boot from disk.</li>
+          <li lang="ja">88-DCDD フロッピーコントローラとドライブ A〜D。CP/M 2.2b、CP/M 3、Zork がディスクから起動。</li>
+          <li lang="en">Altair BASIC 8K in ROM at E000h.</li>
+          <li lang="ja">Altair BASIC 8K を ROM として E000h に取り付けて実行。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="machine reveal">
+      <figure class="shot"><img src="assets/altair680b.jpg" alt="The Altair 680b front panel in AltairSim" loading="lazy" width="852" height="345"></figure>
+      <div>
+        <h3>ALTAIR 680b</h3>
+        <p class="cpu">Motorola MC6800 · 500 kHz</p>
+        <ul>
+          <li lang="en">PROM monitor (<code>M</code>, <code>J</code>, <code>L</code>), and Altair 680 BASIC loaded from paper-tape records.</li>
+          <li lang="ja">PROM モニタ(<code>M</code>、<code>J</code>、<code>L</code>)と、紙テープ版の Altair 680 BASIC の読み込み。</li>
+          <li lang="en">68-UIO board and Pertec FD3712 floppy controller. FLEX 3.0 and CP/68 boot from disk; FLEX BASIC can SAVE and LOAD.</li>
+          <li lang="ja">68-UIO ボードと Pertec FD3712 フロッピーコントローラ。FLEX 3.0 と CP/68 がディスクから起動し、FLEX BASIC で SAVE と LOAD ができます。</li>
+          <li lang="en">The power switch is on the back of the real machine, so it is a button beside the panel.</li>
+          <li lang="ja">実機では電源スイッチが背面にあるので、パネルの横のボタンで入れます。</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="machine reveal">
+      <figure class="shot"><img src="assets/imsai8080.jpg" alt="The IMSAI 8080 CP-A front panel in AltairSim, with blue and red paddle switches" loading="lazy" width="1770" height="740"></figure>
+      <div>
+        <h3>IMSAI 8080</h3>
+        <p class="cpu">Intel 8080 · S-100</p>
+        <ul>
+          <li lang="en">CP-A front panel with paddle switches and the programmed-output LEDs.</li>
+          <li lang="ja">パドルスイッチとプログラム出力 LED のある CP-A フロントパネル。</li>
+          <li lang="en">SIO-2 serial board and the FIF floppy interface (its host-visible behaviour, error codes included).</li>
+          <li lang="ja">SIO-2 シリアルボードと FIF フロッピーインタフェース(ホストから見える動作をエラーコードまで再現)。</li>
+          <li lang="en">IMSAI CP/M 1.31 boots. CP/M 1.33, CP/M 2.2, Fig-Forth, IMDOS 2.02 and 2.05 boot from the <b>ほかの OS で起動</b> (boot another OS) menu.</li>
+          <li lang="ja">IMSAI CP/M 1.31 が起動。「ほかの OS で起動」から CP/M 1.33、CP/M 2.2、Fig-Forth、IMDOS 2.02、2.05 も起動します。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="kicker reveal"><span lang="en">Features</span><span lang="ja">特長</span></div>
+    <h2 class="reveal"><span lang="en">Disks, a terminal, and tested CPUs.</span><span lang="ja">ディスク、端末、テスト済みの CPU。</span></h2>
+    <div class="cards">
+      <div class="card reveal"><div class="ico">01 / DISK</div><h3><span lang="en">Read, write, format</span><span lang="ja">読む、書く、フォーマットする</span></h3><p><span lang="en">Disks are copied to a working copy, so writes never touch the original. Blank unformatted disks can be formatted with the guest OS's own tool: <code>AFORMAT</code>, <code>NEWDISK</code> or <code>INIT</code>.</span><span lang="ja">ディスクは作業用コピーに書き込むので、元のファイルは変わりません。未フォーマットの空ディスクを作り、ゲスト OS のツール(<code>AFORMAT</code>、<code>NEWDISK</code>、<code>INIT</code>)でフォーマットできます。</span></p></div>
+      <div class="card reveal"><div class="ico">02 / TERM</div><h3><span lang="en">80 × 24 terminal</span><span lang="ja">80 × 24 の端末</span></h3><p><span lang="en">Understands ANSI (VT100) and ADM-3A cursor control, enough for WordMaster on CP/M. Serial speed can be limited to 9600, 1200, 300 or 110 baud.</span><span lang="ja">ANSI(VT100 系)と ADM-3A のカーソル制御を解釈し、CP/M の WordMaster が動きます。シリアルの速度は 9600、1200、300、110 ボーに制限できます。</span></p></div>
+      <div class="card reveal"><div class="ico">03 / 8080</div><h3><span lang="en">8080 exerciser: 25 / 25 PASS</span><span lang="ja">8080EXM: 25 項目すべて PASS</span></h3><p><span lang="en">TST8080, 8080PRE, CPUTEST and 8080EXM all pass. 8080EXM runs 23.8 billion clocks, about 3.3 hours on a real 2 MHz 8080.</span><span lang="ja">TST8080、8080PRE、CPUTEST、8080EXM に合格。8080EXM は 238 億クロックで、2MHz の実機なら約 3.3 時間分です。</span></p></div>
+      <div class="card reveal"><div class="ico">04 / 6800</div><h3><span lang="en">6800 functional test</span><span lang="ja">6800 の機能テスト</span></h3><p><span lang="en">No standard 6800 CPU test was found, so the project generates one: 2,660 cases covering 196 opcodes and every addressing mode, checked against a separate Python reference model.</span><span lang="ja">定番の 6800 CPU テストが見つからなかったので、自作しました。196 オペコードと全アドレッシングモードの 2,660 ケースを、別に書いた Python の参照モデルと照合します。</span></p></div>
+      <div class="card reveal"><div class="ico">05 / CPM</div><h3><span lang="en">Build a CP/M disk</span><span lang="ja">CP/M ディスクをつくる</span></h3><p><span lang="en">FORTRAN-80 and COBOL-80 are distributed as loose files. The app packs them into one CP/M 2.2 disk image you can mount on drive B.</span><span lang="ja">FORTRAN-80 や COBOL-80 は単体のファイルで配られています。アプリがそれらを CP/M 2.2 のディスクイメージ 1 枚にまとめ、ドライブ B に入れて使えます。</span></p></div>
+      <div class="card reveal"><div class="ico">06 / SPEED</div><h3><span lang="en">Real speed or flat out</span><span lang="ja">実機の速度か、最速か</span></h3><p><span lang="en">Run at the real clock rate, catching up after short stalls, or as fast as the Mac can go.</span><span lang="ja">実時間に合わせて実行し、遅れた分は取り戻すか、Mac の最速で走らせるかを選べます。</span></p></div>
+    </div>
+    <div class="machine reveal" style="margin-top:48px">
+      <figure class="shot"><img src="assets/cpm22.jpg" alt="The AltairSim terminal showing 56K CP/M 2.2b and a DIR listing" loading="lazy" width="1040" height="780"></figure>
+      <div>
+        <h3>CP/M 2.2b</h3>
+        <p class="cpu"><span lang="en">Altair 8800 · 8" floppy</span><span lang="ja">Altair 8800 · 8 インチフロッピー</span></p>
+        <ul>
+          <li lang="en"><code>DIR</code>, <code>PIP</code> copies to disk, and <code>MBASIC</code> (BASIC-80) were checked in the app.</li>
+          <li lang="ja"><code>DIR</code>、<code>PIP</code> でのディスクへのコピー、<code>MBASIC</code>(BASIC-80)をアプリで確かめています。</li>
+          <li lang="en">Drives can be mounted and ejected by clicking the drive door.</li>
+          <li lang="ja">ドライブのドアをクリックすると、ディスクを入れたり出したりできます。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="start">
+  <div class="wrap">
+    <div class="kicker reveal"><span lang="en">Get started</span><span lang="ja">使い方</span></div>
+    <h2 class="reveal"><span lang="en">Build it from source.</span><span lang="ja">ソースからビルドする。</span></h2>
+    <p class="sub reveal"><span lang="en">There is no prebuilt download. You need macOS 14 or later and Xcode 16 or later (Swift 6 toolchain).</span><span lang="ja">ビルド済みの配布はありません。macOS 14 以降と Xcode 16 以降(Swift 6 のツールチェーン)が必要です。</span></p>
+    <div class="reveal" style="margin-top:30px">
+<pre id="code"><button class="btn copy" type="button" id="copyBtn">COPY</button><span class="c"># clone</span>
+git clone https://github.com/Masakai/AltairSim.git &amp;&amp; cd AltairSim
+
+<span class="c"># run the app</span>
+swift run AltairSim
+
+<span class="c"># or build build/AltairSim.app (ad hoc signed, not notarized)</span>
+Tools/make_app.sh --install</pre>
+    </div>
+    <ol class="steps reveal">
+      <li><span lang="en">The app's menus and buttons are in Japanese. Open Settings (⌘,) and import the ROMs and disk images (see below).</span><span lang="ja"><b>AltairSim ▸ 設定…</b>(⌘,)を開き、ROM とディスクイメージを取り込みます(下の「ROM とディスク」)。</span></li>
+      <li><span lang="en">On the Altair 8800, press <b>CP/M 2.2</b>. The machine boots from drive A and <code>A&gt;</code> appears in the terminal.</span><span lang="ja">Altair 8800 で <b>CP/M 2.2</b> を押すと、ドライブ A から起動して、端末に <code>A&gt;</code> が出ます。</span></li>
+      <li><span lang="en">On the Altair 680b, turn the power on. The PROM monitor prints its <code>.</code> prompt. The button <b>BASIC を読み込んで起動</b> (load and start BASIC) runs BASIC.</span><span lang="ja">Altair 680b は電源を入れると PROM モニタの <code>.</code> が出ます。「BASIC を読み込んで起動」で BASIC が動きます。</span></li>
+      <li><span lang="en">On the IMSAI 8080, press <b>CP/M 1.31</b>, or key a program in with the paddles and RUN it.</span><span lang="ja">IMSAI 8080 は <b>CP/M 1.31</b> を押すか、パドルでプログラムを打ち込んで RUN します。</span></li>
+      <li><span lang="en"><code>swift test</code> runs the tests. Tests that need ROMs or disks you have not imported are skipped.</span><span lang="ja"><code>swift test</code> でテストを実行します。取り込んでいない ROM やディスクが必要なテストは、自動でスキップします。</span></li>
+    </ol>
+  </div>
+</section>
+
+<section id="roms">
+  <div class="wrap">
+    <div class="kicker reveal"><span lang="en">ROMs &amp; disks</span><span lang="ja">ROM とディスク</span></div>
+    <h2 class="reveal"><span lang="en">Bring your own ROMs and disks.</span><span lang="ja">ROM もディスクも、自分で取り込む。</span></h2>
+    <p class="sub reveal"><span lang="en">Because of their distributors' licenses, ROMs, disk images and 8080 test programs are not in this repository or the app. Check each distributor's terms, download the files, and import them in the Settings window: drag files or folders onto the list, and the app identifies them by name. IMSAI <code>.tgz</code> archives can be imported as they are.</span><span lang="ja">配布元のライセンスの都合で、ROM、ディスクイメージ、8080 テストプログラムは、リポジトリにもアプリにも含めていません。配布元の条件を確かめて入手し、設定画面へ取り込みます。ファイルやフォルダを一覧へドラッグすると、名前で判別します。IMSAI の <code>.tgz</code> は展開せずにそのまま取り込めます。</span></p>
+    <div class="box reveal tbl" style="margin-top:30px">
+      <table>
+        <tr><th><span lang="en">MACHINE</span><span lang="ja">機種</span></th><th><span lang="en">FILES</span><span lang="ja">ファイル</span></th><th><span lang="en">WHERE TO LOOK</span><span lang="ja">探す場所</span></th></tr>
+        <tr><td>Altair 8800</td><td><span lang="en">Altair BASIC 8K ROM</span><span lang="ja">Altair BASIC 8K ROM</span></td><td><a href="https://altairclone.com/downloads/roms/8K%20BASIC/">altairclone.com/downloads/roms/8K BASIC/</a></td></tr>
+        <tr><td>Altair 8800</td><td><span lang="en">Disk boot loader (<code>88dskrom.bin</code>)</span><span lang="ja">ディスクブートローダ(<code>88dskrom.bin</code>)</span></td><td><a href="https://github.com/tommojphillips/Altair8800/tree/master/roms">github.com/tommojphillips/Altair8800</a></td></tr>
+        <tr><td>Altair 8800</td><td><span lang="en">CP/M 2.2b, CP/M 3, Zork, BASIC Compiler, BDS C, FORTRAN-80, COBOL-80</span><span lang="ja">CP/M 2.2b、CP/M 3、Zork、BASIC コンパイラ、BDS C、FORTRAN-80、COBOL-80</span></td><td><a href="https://altairclone.com/downloads/cpm/">altairclone.com/downloads/cpm/</a></td></tr>
+        <tr><td>8080</td><td><span lang="en">CPU tests (TST8080, 8080PRE, CPUTEST, 8080EXM)</span><span lang="ja">CPU テスト(TST8080、8080PRE、CPUTEST、8080EXM)</span></td><td><a href="https://github.com/superzazu/8080/tree/master/cpu_tests">github.com/superzazu/8080</a></td></tr>
+        <tr><td>Altair 680b</td><td><span lang="en">PROM monitors, BASIC, boot PROM, FLEX 3.0, CP/68</span><span lang="ja">PROM モニタ、BASIC、起動 PROM、FLEX 3.0、CP/68</span></td><td><a href="https://deramp.com/downloads/altair/software/altair_680/">deramp.com/downloads/altair/software/altair_680/</a></td></tr>
+        <tr><td>IMSAI 8080</td><td><span lang="en">CP/M 1.31, IMDOS <code>FORMAT.COM</code></span><span lang="ja">CP/M 1.31、IMDOS の <code>FORMAT.COM</code></span></td><td><a href="https://deramp.com/downloads/mfe_archive/010-S100%20Computers%20and%20Boards/00-Imsai/40-Imsai%20Software/">deramp.com (IMSAI software)</a></td></tr>
+        <tr><td>IMSAI 8080</td><td><span lang="en">CP/M 1.33, CP/M 2.2, Fig-Forth, IMDOS 2.02 / 2.05</span><span lang="ja">CP/M 1.33、CP/M 2.2、Fig-Forth、IMDOS 2.02 / 2.05</span></td><td><a href="https://www.icl1900.co.uk/unix4fun/z80pack/ftp/imsai/readme.txt"><span lang="en">z80pack mirror</span><span lang="ja">z80pack のミラー</span></a></td></tr>
+      </table>
+    </div>
+    <p class="sub reveal" style="margin-top:16px"><span lang="en">The exact URL for each file is shown in the Settings window. The full list is in the <a href="https://github.com/Masakai/AltairSim#入手先">README</a>.</span><span lang="ja">ファイルごとの正確な取得元は、設定画面の一覧にあります。全体の一覧は <a href="https://github.com/Masakai/AltairSim#入手先">README</a> にあります。</span></p>
+  </div>
+</section>
+
+<section id="notes">
+  <div class="wrap">
+    <div class="note reveal">
+      <div class="kicker"><span lang="en">Notes</span><span lang="ja">注意点</span></div>
+      <h2><span lang="en">What is not done yet</span><span lang="ja">まだできていないこと</span></h2>
+      <div class="tbl">
+      <table>
+        <tr><td><span lang="en">Timing</span><span lang="ja">タイミング</span></td><td><span lang="en">The floppy controllers do not model rotation in time. The 88-DCDD advances one sector per sector-register read; the FD3712 and FIF approximate each command's busy time.</span><span lang="ja">フロッピーの回転は時間で再現していません。88-DCDD はセクタレジスタを読むたびに 1 セクタ進み、FD3712 と FIF はコマンドごとの所要時間で近似しています。</span></td></tr>
+        <tr><td>IMSAI</td><td><span lang="en">The INTA and HOLD LEDs are always off. FIF error codes 91, 92 and 94–97 are not reproduced. UCSD p-System IV starts but prints nothing.</span><span lang="ja">INTA と HOLD の LED は常に消灯です。FIF のエラーコード 91、92、94〜97 は再現していません。UCSD p-System IV は起動しても出力がありません。</span></td></tr>
+        <tr><td>6800</td><td><span lang="en">The CPU and its reference model were written by the same person, so a shared misunderstanding would not be caught. Not compared against real hardware or another emulator.</span><span lang="ja">CPU と参照モデルは同じ人が書いたので、同じ思い違いは見つけられません。実機や別のエミュレータとは照合していません。</span></td></tr>
+        <tr><td><span lang="en">Signing</span><span lang="ja">署名</span></td><td><span lang="en">The app is ad hoc signed for your own Mac. To give it to others, sign it with a Developer ID and notarize it.</span><span lang="ja">アプリはアドホック署名で、自分の Mac で使う前提です。人に配る場合は、Developer ID での署名と公証が必要です。</span></td></tr>
+      </table>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>© 2026 Masanori Sakai · MIT License</div>
+    <div><a href="https://github.com/Masakai/AltairSim">GitHub</a> · <a href="https://github.com/Masakai/AltairSim/blob/main/README.md">README</a> · <a href="https://github.com/Masakai/AltairSim/blob/main/LICENSE">LICENSE</a></div>
+  </div>
+</footer>
+
+<script>
+(() => {
+  "use strict";
+  const root = document.documentElement;
+  const saved = (() => { try { return localStorage.getItem("lang"); } catch { return null; } })();
+  const initial = (navigator.language || "").toLowerCase().startsWith("ja") ? "ja" : "en";
+  const setLang = (l) => {
+    document.querySelectorAll("video").forEach(v => v.pause());
+    root.dataset.lang = l; root.lang = l;
+    try { localStorage.setItem("lang", l); } catch {}
+    document.title = l === "ja" ? "AltairSim - Altair 8800、Altair 680b、IMSAI 8080 を Mac で" : "AltairSim — Altair 8800, Altair 680b and IMSAI 8080 on your Mac";
+  };
+  setLang(saved || initial);
+  document.getElementById("langBtn").addEventListener("click", () => setLang(root.dataset.lang === "ja" ? "en" : "ja"));
+
+  const io = "IntersectionObserver" in window ? new IntersectionObserver((es) => es.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+  }), { threshold: .12 }) : null;
+  document.querySelectorAll(".reveal").forEach(el => io ? io.observe(el) : el.classList.add("in"));
+
+  const copyBtn = document.getElementById("copyBtn");
+  copyBtn.addEventListener("click", async () => {
+    const text = [...document.getElementById("code").childNodes].filter(n => n !== copyBtn)
+      .map(n => n.textContent).join("").replace(/^# .*\n/gm, "").replace(/\n{2,}/g, "\n").trim();
+    try { await navigator.clipboard.writeText(text); copyBtn.textContent = "COPIED"; }
+    catch { copyBtn.textContent = "SELECT & COPY"; }
+    setTimeout(() => copyBtn.textContent = "COPY", 1600);
+  });
+})();
+</script>
+</body>
+</html>
