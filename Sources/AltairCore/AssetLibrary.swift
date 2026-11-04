@@ -100,6 +100,10 @@ public final class AssetLibrary: @unchecked Sendable {
         let g6 = "Altair 680b"
         let cpu = "https://github.com/superzazu/8080/tree/master/cpu_tests"
         let gi = "IMSAI 8080 ディスク"
+        let gl = "Altair 8800 言語系のディスク"
+        let gf = "CP/M 言語系の単体ファイル(ディスクにまとめて使う)"
+        let fortranSource = "\(altairclone)/cpm/CPM%202.2/FORTRAN-80%20v3.44/"
+        let cobolSource = "\(altairclone)/cpm/CPM%202.2/COBOL-80/"
         let imsaiDeramp = "https://deramp.com/downloads/mfe_archive/010-S100%20Computers%20and%20Boards/00-Imsai/40-Imsai%20Software/IMSAI%20CPM/imsai-cpm13/disks/library/imsai-cpm13.dsk"
         let imsaiZ80pack = "https://www.icl1900.co.uk/unix4fun/z80pack/ftp/imsai"
         let imsaiFormatCOM = "https://deramp.com/downloads/mfe_archive/010-S100%20Computers%20and%20Boards/00-Imsai/40-Imsai%20Software/IMDOS/FORMAT.COM"
@@ -134,6 +138,26 @@ public final class AssetLibrary: @unchecked Sendable {
             a("imsai/disks/imdos205r1-maslin.dsk", "IMDOS 2.05 rev.1(16K、Maslin 版)", gi, 256_256, "\(imsaiZ80pack)/imdos205r1-maslin.tgz"),
             a("imsai/disks/imdos205r1-peters.dsk", "IMDOS 2.05 rev.1(16K、Peters 版)", gi, 256_256, "\(imsaiZ80pack)/imdos205r1-peters.tgz"),
             a("imsai/cpm/FORMAT.COM", "IMDOS の FORMAT.COM(IMSAI FORMATTER-INITIALIZER 2.05)", gi, 3712, imsaiFormatCOM),
+            // 言語系のディスク(altairclone.com)
+            a("disks/bascom.dsk", "Microsoft BASIC コンパイラ 5.3a(CP/M 2.2)", gl, 337_664, "\(altairclone)/cpm/CPM%202.2/BASIC%20Compiler%205.3a/"),
+            a("disks/bdsc.dsk", "BDS C コンパイラ(CP/M 2.2)", gl, 337_664, "\(altairclone)/cpm/CPM%202.2/BDS%20C%20Compiler/"),
+            a("disks/DOS 1.0 and Fortran 2.8.dsk", "Altair DOS 1.0 と FORTRAN 2.8(Altair DOS 用、未検証)", gl, 337_664, "\(altairclone)/altair_dos/"),
+            a("disks/Fortran 2-8.dsk", "Altair FORTRAN 2.8(Altair DOS 用、未検証)", gl, 337_664, "\(altairclone)/altair_dos/"),
+            // 単体のファイル(「CP/M ディスクをつくる…」で 1 枚のディスクにまとめる。サイズは配布元の表記が丸めてあるので、確認しない)
+            a("cpm/lang/F80.COM", "FORTRAN-80 コンパイラ(F80.COM、v3.44)", gf, 0, fortranSource),
+            a("cpm/lang/FORLIB.REL", "FORTRAN-80 のライブラリ(FORLIB.REL)", gf, 0, fortranSource),
+            a("cpm/lang/M80.COM", "MACRO-80 アセンブラ(M80.COM)", gf, 0, fortranSource),
+            a("cpm/lang/L80.COM", "LINK-80 リンカ(L80.COM)", gf, 0, fortranSource),
+            a("cpm/lang/LIB.COM", "LIB-80 ライブラリアン(LIB.COM)", gf, 0, fortranSource),
+            a("cpm/lang/CREF80.COM", "CREF-80(CREF80.COM)", gf, 0, fortranSource),
+            a("cpm/lang/COBOL.COM", "COBOL-80 コンパイラ(COBOL.COM)", gf, 0, cobolSource),
+            a("cpm/lang/COBOL1.OVR", "COBOL-80 のオーバーレイ 1(COBOL1.OVR)", gf, 0, cobolSource),
+            a("cpm/lang/COBOL2.OVR", "COBOL-80 のオーバーレイ 2(COBOL2.OVR)", gf, 0, cobolSource),
+            a("cpm/lang/COBOL3.OVR", "COBOL-80 のオーバーレイ 3(COBOL3.OVR)", gf, 0, cobolSource),
+            a("cpm/lang/COBOL4.OVR", "COBOL-80 のオーバーレイ 4(COBOL4.OVR)", gf, 0, cobolSource),
+            a("cpm/lang/COBLIB.REL", "COBOL-80 のライブラリ(COBLIB.REL)", gf, 0, cobolSource),
+            a("cpm/lang/COBLBX.REL", "COBOL-80 のライブラリ(COBLBX.REL)", gf, 0, cobolSource),
+            a("cpm/lang/RUNCOB.COM", "COBOL-80 の実行環境(RUNCOB.COM)", gf, 0, cobolSource),
         ]
     }()
 
@@ -214,7 +238,7 @@ public final class AssetLibrary: @unchecked Sendable {
                 try fm.copyItem(at: f, to: dest)
                 report.imported.append((asset, f.lastPathComponent))
                 let size = (try? fm.attributesOfItem(atPath: dest.path)[.size] as? Int) ?? nil
-                if let size, size != asset.size {
+                if let size, asset.size > 0, size != asset.size {
                     report.sizeWarnings.append("\(asset.fileName)(\(size) バイト、想定 \(asset.size))")
                 }
             } catch {

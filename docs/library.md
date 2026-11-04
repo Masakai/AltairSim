@@ -16,6 +16,18 @@
 | `disks/zork.dsk` `disks/zork-ReadMe.txt` | Zork(Burcon 56K CP/M 2.2 のブータブルディスク。ZORK1、ZORK2 が遊べる) | https://altairclone.com/downloads/cpm/CPM%202.2/Zork/ |
 | `disks/cpm3-ReadMe.pdf` | 上記 CP/M 3 ディスクの配布元の説明 | 同上(`ReadMe.pdf`) |
 
+### 言語系(altairclone.com、CP/M 2.2 用)
+
+| ファイル | 内容 | 取得元 |
+|---|---|---|
+| `disks/bascom.dsk` | Microsoft BASIC コンパイラ 5.3a(ディスクイメージ。ドライブ B に入れて使う) | https://altairclone.com/downloads/cpm/CPM%202.2/BASIC%20Compiler%205.3a/ |
+| `disks/bdsc.dsk` | BDS C コンパイラ(同上) | https://altairclone.com/downloads/cpm/CPM%202.2/BDS%20C%20Compiler/ |
+| `disks/DOS 1.0 and Fortran 2.8.dsk` `disks/Fortran 2-8.dsk` | Altair DOS 用の FORTRAN 2.8(CP/M ではない。**動作は未検証**) | https://altairclone.com/downloads/altair_dos/ |
+| `cpm/lang/F80.COM` `FORLIB.REL` `M80.COM` `L80.COM` `LIB.COM` `CREF80.COM` | Microsoft FORTRAN-80 v3.44 と、MACRO-80、LINK-80、LIB-80、CREF-80(**単体のファイル**) | https://altairclone.com/downloads/cpm/CPM%202.2/FORTRAN-80%20v3.44/ |
+| `cpm/lang/COBOL.COM` `COBOL1.OVR`〜`COBOL4.OVR` `COBLIB.REL` `COBLBX.REL` `RUNCOB.COM` | Microsoft COBOL-80(**単体のファイル**) | https://altairclone.com/downloads/cpm/CPM%202.2/COBOL-80/ |
+
+FORTRAN-80 と COBOL-80 は、配布元ではディスクイメージではなく単体のファイルです。設定画面の「CP/M ディスクをつくる…」で、1 枚のディスクイメージにまとめます(下の「ユーザー追加」の節の後ろ)。COBOL-80 の M80.COM は FORTRAN-80 のものと版が違うことがありますが、カタログには FORTRAN-80 の folder のものだけを入れています(COBOL-80 のフォルダにある M80.COM、L80.COM が必要なときは、「ファイルを追加…」で足せます)。
+
 ディスクイメージは、アプリの起動ボタンを押すと `~/Library/Application Support/AltairSim/disks/` に作業用コピーが作られます。書き込みはそのコピーに入り、ライブラリのファイルは変わりません。
 
 ## Altair 680b(Motorola 6800)用

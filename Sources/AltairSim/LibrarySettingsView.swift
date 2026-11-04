@@ -9,6 +9,7 @@ struct LibrarySettingsView: View {
     @State private var message = ""
     @State private var dropping = false
     @State private var editor: UserItemEditor.Mode?
+    @State private var showCPMBuilder = false
 
     private var groups: [(name: String, assets: [LibraryAsset])] {
         var order: [String] = []
@@ -36,6 +37,8 @@ struct LibrarySettingsView: View {
                     .help("複数のファイルや、ファイルの入ったフォルダを選びます。ファイル名で項目を判別します")
                 Button("ユーザー追加…", action: addUser)
                     .help("一覧にない ROM・プログラム・ディスクイメージを、名前をつけて追加します")
+                Button("CP/M ディスクをつくる…") { showCPMBuilder = true }
+                    .help("FORTRAN-80 や COBOL-80 などのファイルを、CP/M 2.2 のディスクイメージ 1 枚にまとめます")
                 Button("Finder で開く") { openInFinder() }
                 Spacer()
                 Text("\(presentCount) / \(AssetLibrary.catalog.count) 件")
@@ -71,6 +74,12 @@ struct LibrarySettingsView: View {
         .padding(16)
         .frame(width: 720, height: 700)
         .onAppear { model.reloadUserItems() }
+        .sheet(isPresented: $showCPMBuilder) {
+            CPMDiskBuilder(model: model) { result in
+                showCPMBuilder = false
+                if let result { message = result }
+            }
+        }
         .sheet(item: $editor) { mode in
             UserItemEditor(model: model, mode: mode) { result in
                 editor = nil
@@ -130,7 +139,7 @@ struct LibrarySettingsView: View {
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 1) {
                 Text(asset.title)
-                Text("\(asset.fileName)  ·  \(asset.size) バイト")
+                Text(asset.size > 0 ? "\(asset.fileName)  ·  \(asset.size) バイト" : asset.fileName)
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -158,14 +167,14 @@ struct LibrarySettingsView: View {
 
     private func importOne(_ asset: LibraryAsset) {
         let panel = NSOpenPanel()
-        panel.message = "\(asset.title)(\(asset.fileName)、\(asset.size) バイト)にするファイルを選択"
+        panel.message = asset.size > 0 ? "\(asset.title)(\(asset.fileName)、\(asset.size) バイト)にするファイルを選択" : "\(asset.title)(\(asset.fileName))にするファイルを選択"
         panel.allowedContentTypes = [.data]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try model.library.importFile(url, as: asset)
             model.libraryRevision += 1
             let size = (try? FileManager.default.attributesOfItem(atPath: model.library.url(asset.path).path)[.size] as? Int) ?? nil
-            if let size, size != asset.size {
+            if let size, asset.size > 0, size != asset.size {
                 message = "\(asset.fileName) を取り込みました。ただしサイズが想定と違います(\(size) バイト、想定 \(asset.size))"
             } else {
                 message = "\(asset.fileName) を取り込みました"
